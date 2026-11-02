@@ -1,0 +1,80 @@
+<resources>
+    <string name="app_name">FreshScan AI</string>
+    <string name="app_tagline">Inspección visual de frescura y vida útil</string>
+    <string name="action_scan_food">Escanear alimento</string>
+    <string name="action_pick_gallery">Elegir de galería</string>
+    <string name="action_conservation_guide">Guía de conservación</string>
+    <string name="action_about">Acerca de</string>
+    <string name="action_retake_photo">Repetir fotografía</string>
+    <string name="action_confirm_analyze">Analizar con Gemini</string>
+    <string name="action_cancel_analysis">Cancelar análisis</string>
+    <string name="action_improve_analysis">Mejorar análisis</string>
+    <string name="action_new_scan">Nuevo escaneo</string>
+    <string name="action_correct_product">Corregir producto</string>
+    <string name="action_restore_previous_result">Ver análisis automático anterior</string>
+    <string name="food_safety_disclaimer">Esta evaluación es orientativa y se basa únicamente en el aspecto visual superficial. Si percibes mal olor, moho o textura viscosa, descarta el alimento.</string>
+    <string name="firestore_database_id" translatable="false">ai-studio-android-freshsca-6abc315d-ae25-4bc3-84ab-d12dfae11e20</string>
+    <string name="default_web_client_id" translatable="false">189905583280-7ijvqv10ttltkq6fka44hbekqel25j3m.apps.googleusercontent.com</string>
+
+    <string name="consent_dialog_title">Procesamiento de imagen con IA</string>
+    <string name="consent_dialog_body">Para analizar el estado de madurez y estimar la vida útil, la fotografía del alimento se enviará de forma segura a los servidores de Gemini Vision. ¿Deseas continuar?</string>
+    <string name="consent_accept_button">Aceptar y analizar</string>
+    <string name="consent_decline_button">Cancelar</string>
+
+    <string name="manual_correction_title">Corregir producto detectado</string>
+    <string name="manual_correction_hint">Nombre de la fruta o verdura</string>
+    <string name="manual_correction_apply">Aplicar corrección</string>
+    <string name="manual_correction_cancel">Cancelar</string>
+
+    <string name="camera_framing_tip">Centra la fruta o verdura con buena iluminación para detectar su madurez en tiempo real</string>
+    <string name="camera_permission_title">Permiso de cámara necesario</string>
+    <string name="camera_permission_rationale">FreshScan AI necesita acceso a la cámara para escanear frutas y verduras o puedes elegir una foto de tu galería.</string>
+    <string name="camera_grant_permission">Conceder permiso de cámara</string>
+    <string name="camera_pick_gallery">Elegir de galería</string>
+    <string name="camera_take_photo">Capturar fotografía</string>
+    <string name="camera_retake_photo">Repetir foto</string>
+    <string name="camera_analyze_food">Analizar alimento</string>
+
+    <string name="processing_title">Analizando frescura y madurez...</string>
+    <string name="processing_subtitle">Evaluando coloración superficial, textura e indicadores poscosecha</string>
+    <string name="processing_cancel">Cancelar</string>
+    <string name="error_generic_title">No se pudo completar el análisis</string>
+    <string name="error_retry_button">Reintentar</string>
+
+    <string name="results_deterioration_alert_title">Precaución: Posible deterioro visible</string>
+    <string name="results_deterioration_safety_advice">Se detectaron signos superficiales de deterioro. Inspeccione aroma y firmeza; ante cualquier duda, descarte el alimento.</string>
+    <string name="results_recommendations_title">Recomendaciones de conservación</string>
+    <string name="results_visual_observations_title">Observaciones visuales</string>
+    <string name="results_general_reference_title">Referencia poscosecha</string>
+    <string name="results_improve_analysis_cta">Ajustar condiciones de almacenamiento</string>
+    <string name="results_back_to_automatic">Volver al cálculo estándar</string>
+    <string name="results_scan_another">Escanear otro alimento</string>
+    <string name="cd_captured_food_photo">Fotografía del alimento analizado</string>
+
+    <string name="advanced_title">Condiciones de almacenamiento</string>
+    <string name="advanced_subtitle">Ajusta dónde y cómo conservas este alimento para recalcular su vida útil restante con mayor precisión.</string>
+    <string name="advanced_storage_env_label">Ambiente actual</string>
+    <string name="advanced_temperature_label">Temperatura aproximada</string>
+    <string name="advanced_days_stored_label">Días que ya lleva almacenado</string>
+    <string name="advanced_prep_state_label">Estado de preparación</string>
+    <string name="advanced_future_plan_label">Plan de conservación</string>
+    <string name="advanced_recalculate_button">Recalcular vida útil</string>
+
+    <string name="guide_title">Guía de Conservación Poscosecha</string>
+    <string name="guide_search_hint">Buscar fruta o verdura...</string>
+    <string name="guide_filter_all">Todos</string>
+    <string name="guide_filter_fruits">Frutas</string>
+    <string name="guide_filter_vegetables">Verduras</string>
+
+    <string name="about_title">Acerca de FreshScan AI</string>
+    <string name="about_purpose_title">Propósito de la aplicación</string>
+    <string name="about_purpose_body">FreshScan AI ayuda a estimar el grado de maduración y la vida útil orientativa de frutas y verduras frescas mediante visión por computadora y criterios de fisiología poscosecha.</string>
+    <string name="about_scope_title">Metodología híbrida y catálogo</string>
+    <string name="about_scope_body">Combina detección visual instantánea en el dispositivo con análisis multimodal profundo y tablas poscosecha basadas en USDA FoodKeeper, UC Davis Postharvest Center y FAO.</string>
+    <string name="about_safety_title">Aviso de inocuidad alimentaria</string>
+    <string name="about_safety_body">Esta herramienta evalúa únicamente la apariencia externa visible en fotografía y no detecta contaminación microbiológica invisible. Si percibe mal olor, moho o textura viscosa, deseche el alimento.</string>
+    <string name="about_privacy_title">Privacidad y consentimiento</string>
+    <string name="about_privacy_body">Las imágenes solo se procesan cuando solicitas un análisis. Puedes revocar el consentimiento de análisis en la nube en cualquier momento.</string>
+    <string name="about_revoke_consent">Revocar consentimiento en la nube</string>
+    <string name="about_consent_not_granted">El consentimiento para procesamiento en la nube está desactivado.</string>
+</resources>

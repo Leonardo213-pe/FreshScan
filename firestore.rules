@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidForecastRule(data) {
+      return data.keys().hasAll([
+          'id', 'catalogScope', 'userId', 'productKey', 'productName',
+          'ripenessState', 'hasVisibleDeterioration',
+          'remainingShelfLifeDaysMin', 'remainingShelfLifeDaysMax',
+          'daysToRipenMin', 'daysToRipenMax',
+          'visualObservations', 'deteriorationSigns', 'recommendations',
+          'redMinPermille', 'redMaxPermille',
+          'yellowMinPermille', 'yellowMaxPermille',
+          'greenMinPermille', 'greenMaxPermille',
+          'orangeMinPermille', 'orangeMaxPermille',
+          'purpleMinPermille', 'purpleMaxPermille',
+          'spotMinPermille', 'spotMaxPermille',
+          'aspectRatioMinPermille', 'aspectRatioMaxPermille',
+          'confirmations', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 120
+        && data.catalogScope == 'global_v1'
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.productKey is string && data.productKey.size() >= 1 && data.productKey.size() <= 60
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 100
+        && data.ripenessState in ['UNRIPE', 'RIPENING', 'RIPE', 'OVERRIPE', 'UNDETERMINED']
+        && data.hasVisibleDeterioration is bool
+        && data.remainingShelfLifeDaysMin is int && data.remainingShelfLifeDaysMin >= 0 && data.remainingShelfLifeDaysMin <= 90
+        && data.remainingShelfLifeDaysMax is int && data.remainingShelfLifeDaysMax >= data.remainingShelfLifeDaysMin && data.remainingShelfLifeDaysMax <= 90
+        && data.daysToRipenMin is int && data.daysToRipenMin >= 0 && data.daysToRipenMin <= 30
+        && data.daysToRipenMax is int && data.daysToRipenMax >= data.daysToRipenMin && data.daysToRipenMax <= 30
+        && data.visualObservations is list && data.visualObservations.size() <= 10
+        && data.deteriorationSigns is list && data.deteriorationSigns.size() <= 10
+        && data.recommendations is list && data.recommendations.size() <= 10
+        && data.redMinPermille is int && data.redMinPermille >= 0 && data.redMaxPermille is int && data.redMaxPermille <= 1000
+        && data.yellowMinPermille is int && data.yellowMinPermille >= 0 && data.yellowMaxPermille is int && data.yellowMaxPermille <= 1000
+        && data.greenMinPermille is int && data.greenMinPermille >= 0 && data.greenMaxPermille is int && data.greenMaxPermille <= 1000
+        && data.orangeMinPermille is int && data.orangeMinPermille >= 0 && data.orangeMaxPermille is int && data.orangeMaxPermille <= 1000
+        && data.purpleMinPermille is int && data.purpleMinPermille >= 0 && data.purpleMaxPermille is int && data.purpleMaxPermille <= 1000
+        && data.spotMinPermille is int && data.spotMinPermille >= 0 && data.spotMaxPermille is int && data.spotMaxPermille <= 1000
+        && data.aspectRatioMinPermille is int && data.aspectRatioMinPermille >= 100 && data.aspectRatioMaxPermille is int && data.aspectRatioMaxPermille <= 4000
+        && data.confirmations is int && data.confirmations >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /collective_forecasts/{ruleId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isValidForecastRule(request.resource.data);
+      allow update: if isSignedIn()
+        && isValidForecastRule(request.resource.data);
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+  }
+}

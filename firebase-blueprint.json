@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "VisualForecastRule": {
+      "title": "VisualForecastRule",
+      "description": "Shared visual color/texture feature range rule that maps produce appearance to validated ripeness and shelf-life forecasts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "catalogScope": { "type": "string" },
+        "userId": { "type": "string" },
+        "productKey": { "type": "string" },
+        "productName": { "type": "string" },
+        "ripenessState": { "type": "string" },
+        "hasVisibleDeterioration": { "type": "boolean" },
+        "remainingShelfLifeDaysMin": { "type": "integer" },
+        "remainingShelfLifeDaysMax": { "type": "integer" },
+        "daysToRipenMin": { "type": "integer" },
+        "daysToRipenMax": { "type": "integer" },
+        "visualObservations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "deteriorationSigns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "recommendations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "redMinPermille": { "type": "integer" },
+        "redMaxPermille": { "type": "integer" },
+        "yellowMinPermille": { "type": "integer" },
+        "yellowMaxPermille": { "type": "integer" },
+        "greenMinPermille": { "type": "integer" },
+        "greenMaxPermille": { "type": "integer" },
+        "orangeMinPermille": { "type": "integer" },
+        "orangeMaxPermille": { "type": "integer" },
+        "purpleMinPermille": { "type": "integer" },
+        "purpleMaxPermille": { "type": "integer" },
+        "spotMinPermille": { "type": "integer" },
+        "spotMaxPermille": { "type": "integer" },
+        "aspectRatioMinPermille": { "type": "integer" },
+        "aspectRatioMaxPermille": { "type": "integer" },
+        "confirmations": { "type": "integer" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": [
+        "id",
+        "catalogScope",
+        "userId",
+        "productKey",
+        "productName",
+        "ripenessState",
+        "hasVisibleDeterioration",
+        "remainingShelfLifeDaysMin",
+        "remainingShelfLifeDaysMax",
+        "daysToRipenMin",
+        "daysToRipenMax",
+        "visualObservations",
+        "deteriorationSigns",
+        "recommendations",
+        "redMinPermille",
+        "redMaxPermille",
+        "yellowMinPermille",
+        "yellowMaxPermille",
+        "greenMinPermille",
+        "greenMaxPermille",
+        "orangeMinPermille",
+        "orangeMaxPermille",
+        "purpleMinPermille",
+        "purpleMaxPermille",
+        "spotMinPermille",
+        "spotMaxPermille",
+        "aspectRatioMinPermille",
+        "aspectRatioMaxPermille",
+        "confirmations",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/collective_forecasts/{ruleId}": {
+      "schema": { "$ref": "#/entities/VisualForecastRule" },
+      "description": "Global collective visual forecast rules shared across authenticated FreshScan AI users."
+    }
+  }
+}
