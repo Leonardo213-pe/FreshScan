@@ -153,7 +153,7 @@ class ExampleRobolectricTest {
 
         composeTestRule.onNodeWithTag("detected_products_selector_row").assertIsDisplayed()
         composeTestRule.onNodeWithTag("selected_product_crop_preview").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Manzana").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("product_selector_chip_1").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag("product_selector_chip_0").performClick()
         assertEquals(0, viewModel.uiState.value.selectedProductIndex)

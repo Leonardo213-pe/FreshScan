@@ -50,7 +50,11 @@ class ImageProcessor {
                 BitmapFactory.decodeStream(stream, null, decodeOptions)
             } ?: return null
 
-            scaleDownIfNeeded(decoded, CAPTURE_DIMENSION_PX)
+            val scaled = scaleDownIfNeeded(decoded, CAPTURE_DIMENSION_PX)
+            if (scaled !== decoded && !decoded.isRecycled) {
+                decoded.recycle()
+            }
+            scaled
         } catch (_: Exception) {
             null
         }
@@ -64,15 +68,50 @@ class ImageProcessor {
     }
 
     fun scaleDownIfNeeded(bitmap: Bitmap, maxDimension: Int = MAX_DIMENSION_PX): Bitmap {
+        return scaleAndRotate(
+            bitmap = bitmap,
+            maxDimension = maxDimension,
+            rotationDegrees = 0,
+            recycleSourceIfChanged = false
+        )
+    }
+
+    fun scaleAndRotate(
+        bitmap: Bitmap,
+        maxDimension: Int = MAX_DIMENSION_PX,
+        rotationDegrees: Int = 0,
+        recycleSourceIfChanged: Boolean = false
+    ): Bitmap {
         val width = bitmap.width
         val height = bitmap.height
-        val longestSide = max(width, height)
-        if (longestSide <= maxDimension) return bitmap
+        if (width <= 0 || height <= 0) return bitmap
 
-        val ratio = maxDimension.toFloat() / longestSide.toFloat()
-        val targetWidth = max(1, (width * ratio).roundToInt())
-        val targetHeight = max(1, (height * ratio).roundToInt())
-        return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        val longestSide = max(width, height)
+        val scale = if (longestSide > maxDimension) {
+            maxDimension.toFloat() / longestSide.toFloat()
+        } else {
+            1f
+        }
+        val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
+
+        if (scale >= 1f && normalizedRotation == 0) {
+            return bitmap
+        }
+
+        val matrix = Matrix().apply {
+            if (scale < 1f) {
+                postScale(scale, scale)
+            }
+            if (normalizedRotation != 0) {
+                postRotate(normalizedRotation.toFloat())
+            }
+        }
+
+        val transformed = Bitmap.createBitmap(bitmap, 0, 0, width, height, matrix, true)
+        if (recycleSourceIfChanged && transformed !== bitmap && !bitmap.isRecycled) {
+            bitmap.recycle()
+        }
+        return transformed
     }
 
     fun computeEffectiveCropBounds(
@@ -170,21 +209,27 @@ class ImageProcessor {
 
     fun computePerceptualHash(bitmap: Bitmap): Long {
         val tiny = Bitmap.createScaledBitmap(bitmap, 9, 8, true)
-        var hash = 0L
-        var bitIndex = 0
-        for (y in 0 until 8) {
-            for (x in 0 until 8) {
-                val leftPixel = tiny.getPixel(x, y)
-                val rightPixel = tiny.getPixel(x + 1, y)
-                val leftLuma = Color.red(leftPixel) * 299 + Color.green(leftPixel) * 587 + Color.blue(leftPixel) * 114
-                val rightLuma = Color.red(rightPixel) * 299 + Color.green(rightPixel) * 587 + Color.blue(rightPixel) * 114
-                if (leftLuma > rightLuma) {
-                    hash = hash or (1L shl bitIndex)
+        try {
+            var hash = 0L
+            var bitIndex = 0
+            for (y in 0 until 8) {
+                for (x in 0 until 8) {
+                    val leftPixel = tiny.getPixel(x, y)
+                    val rightPixel = tiny.getPixel(x + 1, y)
+                    val leftLuma = Color.red(leftPixel) * 299 + Color.green(leftPixel) * 587 + Color.blue(leftPixel) * 114
+                    val rightLuma = Color.red(rightPixel) * 299 + Color.green(rightPixel) * 587 + Color.blue(rightPixel) * 114
+                    if (leftLuma > rightLuma) {
+                        hash = hash or (1L shl bitIndex)
+                    }
+                    bitIndex++
                 }
-                bitIndex++
+            }
+            return hash
+        } finally {
+            if (tiny !== bitmap && !tiny.isRecycled) {
+                tiny.recycle()
             }
         }
-        return hash
     }
 
     fun assessImageQuality(bitmap: Bitmap): ImageQualityReport {
@@ -193,18 +238,24 @@ class ImageProcessor {
         var edgeAccum = 0f
         var count = 0
 
-        for (y in 1 until 63) {
-            for (x in 1 until 63) {
-                val p = sample.getPixel(x, y)
-                val luma = (Color.red(p) * 0.299f + Color.green(p) * 0.587f + Color.blue(p) * 0.114f)
-                val px = sample.getPixel(x + 1, y)
-                val py = sample.getPixel(x, y + 1)
-                val lumaX = (Color.red(px) * 0.299f + Color.green(px) * 0.587f + Color.blue(px) * 0.114f)
-                val lumaY = (Color.red(py) * 0.299f + Color.green(py) * 0.587f + Color.blue(py) * 0.114f)
+        try {
+            for (y in 1 until 63) {
+                for (x in 1 until 63) {
+                    val p = sample.getPixel(x, y)
+                    val luma = (Color.red(p) * 0.299f + Color.green(p) * 0.587f + Color.blue(p) * 0.114f)
+                    val px = sample.getPixel(x + 1, y)
+                    val py = sample.getPixel(x, y + 1)
+                    val lumaX = (Color.red(px) * 0.299f + Color.green(px) * 0.587f + Color.blue(px) * 0.114f)
+                    val lumaY = (Color.red(py) * 0.299f + Color.green(py) * 0.587f + Color.blue(py) * 0.114f)
 
-                totalLuma += luma
-                edgeAccum += abs(luma - lumaX) + abs(luma - lumaY)
-                count++
+                    totalLuma += luma
+                    edgeAccum += abs(luma - lumaX) + abs(luma - lumaY)
+                    count++
+                }
+            }
+        } finally {
+            if (sample !== bitmap && !sample.isRecycled) {
+                sample.recycle()
             }
         }
 

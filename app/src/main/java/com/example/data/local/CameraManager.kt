@@ -17,13 +17,15 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 private const val TAG = "CameraManager"
-private const val LIVE_ANALYSIS_INTERVAL_MS = 450L
+private const val LIVE_ANALYSIS_INTERVAL_MS = 650L
 
 enum class FlashModeOption(val imageCaptureMode: Int, val label: String) {
     OFF(ImageCapture.FLASH_MODE_OFF, "Flash apagado"),
@@ -45,8 +47,24 @@ class CameraManager(
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: ImageAnalysis? = null
     private var activeCamera: Camera? = null
-    private val analysisExecutor = Executors.newSingleThreadExecutor()
+    private var analysisExecutor: ExecutorService? = null
     private val lastAnalyzedTimestampMs = AtomicLong(0L)
+    private val isAnalysisPaused = AtomicBoolean(false)
+
+    @Synchronized
+    private fun getOrCreateAnalysisExecutor(): ExecutorService {
+        val current = analysisExecutor
+        if (current != null && !current.isShutdown) {
+            return current
+        }
+        return Executors.newSingleThreadExecutor().also {
+            analysisExecutor = it
+        }
+    }
+
+    fun setAnalysisPaused(paused: Boolean) {
+        isAnalysisPaused.set(paused)
+    }
 
     suspend fun bindCamera(
         lifecycleOwner: LifecycleOwner,
@@ -87,7 +105,12 @@ class CameraManager(
                     .build()
                     .also { analysisUseCase ->
                         if (onLiveFrameAvailable != null) {
-                            analysisUseCase.setAnalyzer(analysisExecutor) { imageProxy ->
+                            val executor = getOrCreateAnalysisExecutor()
+                            analysisUseCase.setAnalyzer(executor) { imageProxy ->
+                                if (isAnalysisPaused.get()) {
+                                    imageProxy.close()
+                                    return@setAnalyzer
+                                }
                                 val now = System.currentTimeMillis()
                                 val last = lastAnalyzedTimestampMs.get()
                                 if (now - last >= LIVE_ANALYSIS_INTERVAL_MS &&
@@ -96,9 +119,13 @@ class CameraManager(
                                     try {
                                         val rotation = imageProxy.imageInfo.rotationDegrees
                                         val raw = imageProxy.toBitmap()
-                                        val scaled = imageProcessor.scaleDownIfNeeded(raw, maxDimension = 320)
-                                        val rotated = imageProcessor.rotateBitmapIfRequired(scaled, rotation)
-                                        onLiveFrameAvailable(rotated)
+                                        val transformed = imageProcessor.scaleAndRotate(
+                                            bitmap = raw,
+                                            maxDimension = 320,
+                                            rotationDegrees = rotation,
+                                            recycleSourceIfChanged = true
+                                        )
+                                        onLiveFrameAvailable(transformed)
                                     } catch (e: Exception) {
                                         Log.d(TAG, "Frame omitido en ImageAnalysis", e)
                                     } finally {
@@ -194,10 +221,14 @@ class CameraManager(
                     try {
                         val rotation = image.imageInfo.rotationDegrees
                         val rawBitmap = image.toBitmap()
-                        val scaled = imageProcessor.scaleDownIfNeeded(rawBitmap)
-                        val rotated = imageProcessor.rotateBitmapIfRequired(scaled, rotation)
+                        val transformed = imageProcessor.scaleAndRotate(
+                            bitmap = rawBitmap,
+                            maxDimension = ImageProcessor.MAX_DIMENSION_PX,
+                            rotationDegrees = rotation,
+                            recycleSourceIfChanged = true
+                        )
                         if (continuation.isActive) {
-                            continuation.resume(Result.success(rotated))
+                            continuation.resume(Result.success(transformed))
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error al procesar la imagen capturada", e)
@@ -219,10 +250,14 @@ class CameraManager(
         )
     }
 
+    @Synchronized
     fun unbind() {
         try {
+            isAnalysisPaused.set(true)
             imageAnalysis?.clearAnalyzer()
             cameraProvider?.unbindAll()
+            analysisExecutor?.shutdown()
+            analysisExecutor = null
         } catch (e: Exception) {
             Log.w(TAG, "Error al desvincular CameraX", e)
         }

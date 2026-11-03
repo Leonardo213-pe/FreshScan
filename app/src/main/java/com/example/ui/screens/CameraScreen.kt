@@ -85,6 +85,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.data.local.CameraManager
@@ -140,19 +142,34 @@ fun CameraScreen(
 
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var isCapturing by remember { mutableStateOf(false) }
+    var isLifecycleResumed by remember { mutableStateOf(true) }
     var cameraErrorText by remember { mutableStateOf<String?>(null) }
     var liveDetection by remember { mutableStateOf<FoodAnalysis?>(null) }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(lifecycleOwner) {
         val granted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
         onPermissionResult(granted)
 
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> isLifecycleResumed = true
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> isLifecycleResumed = false
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             cameraManager.unbind()
         }
+    }
+
+    LaunchedEffect(isCapturing, capturedBitmap, isLifecycleResumed) {
+        cameraManager.setAnalysisPaused(isCapturing || capturedBitmap != null || !isLifecycleResumed)
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -182,6 +199,7 @@ fun CameraScreen(
         val previewView = previewViewRef
         if (isCameraPermissionGranted && previewView != null && capturedBitmap == null) {
             cameraErrorText = null
+            cameraManager.setAnalysisPaused(isCapturing || !isLifecycleResumed)
             val lensFacing = if (lensFacingBack) {
                 CameraSelector.LENS_FACING_BACK
             } else {
@@ -196,7 +214,8 @@ fun CameraScreen(
                     try {
                         val detected = liveYoloDetector.detectInstant(
                             bitmap = frameBitmap,
-                            isPreliminaryForHybrid = true
+                            isPreliminaryForHybrid = true,
+                            isLivePreview = true
                         )
                         liveDetection = if (detected.boundingBox != null && detected.boundingBox.isValid) {
                             detected
@@ -204,6 +223,10 @@ fun CameraScreen(
                             null
                         }
                     } catch (_: Exception) {
+                    } finally {
+                        if (!frameBitmap.isRecycled) {
+                            frameBitmap.recycle()
+                        }
                     }
                 }
             )

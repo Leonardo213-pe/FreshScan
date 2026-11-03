@@ -87,6 +87,7 @@ class LocalYoloDetector(
 
     @Synchronized
     private fun findLearnedSignature(bitmap: Bitmap): LearnedVisualSignature? {
+        if (learnedSignatures.isEmpty()) return null
         val hash = imageProcessor.computePerceptualHash(bitmap)
         if (hash == 0L) return null
         return learnedSignatures.firstOrNull {
@@ -95,17 +96,18 @@ class LocalYoloDetector(
     }
 
     fun extractVisualFeatureVector(bitmap: Bitmap): VisualFeatureVector {
-        return runSpatialAndChromaticDetection(bitmap, null).featureVector
+        return runSpatialAndChromaticDetection(bitmap, null, isLivePreview = true).featureVector
     }
 
     fun detectInstant(
         bitmap: Bitmap,
         storageConditions: StorageConditions? = null,
         manualProductOverride: String? = null,
-        isPreliminaryForHybrid: Boolean = true
+        isPreliminaryForHybrid: Boolean = true,
+        isLivePreview: Boolean = false
     ): FoodAnalysis {
         val startNanos = System.nanoTime()
-        val detection = runSpatialAndChromaticDetection(bitmap, manualProductOverride)
+        val detection = runSpatialAndChromaticDetection(bitmap, manualProductOverride, isLivePreview)
         val elapsedMs = ((System.nanoTime() - startNanos) / 1_000_000L).coerceAtLeast(8L)
 
         val matchedRule = detection.matchedRangeRule
@@ -189,7 +191,8 @@ class LocalYoloDetector(
 
     private fun runSpatialAndChromaticDetection(
         bitmap: Bitmap,
-        manualProductOverride: String?
+        manualProductOverride: String?,
+        isLivePreview: Boolean = false
     ): YoloDetectionResult {
         val width = bitmap.width.coerceAtLeast(1)
         val height = bitmap.height.coerceAtLeast(1)
@@ -291,7 +294,7 @@ class LocalYoloDetector(
         )
 
         val matchedRangeRule = visualForecastStore.findBestMatchingRule(featureVector, manualProductOverride)
-        val learned = findLearnedSignature(bitmap)
+        val learned = if (isLivePreview) null else findLearnedSignature(bitmap)
         val forcedProduct = FoodProduct.findMatchingProduct(manualProductOverride)
 
         val detectedProduct = forcedProduct

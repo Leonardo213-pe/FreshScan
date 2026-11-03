@@ -100,8 +100,8 @@ class FreshScanViewModel(
 
     private var activeAnalysisJob: Job? = null
     private var cloudSyncObserverJob: Job? = null
-    private var periodicCloudSyncJob: Job? = null
     private var activeSyncedUserId: String? = null
+    private var activeSyncedUserEmail: String? = null
     private val isRequestInFlight = AtomicBoolean(false)
     private var pendingAdvancedRequest: Boolean = false
 
@@ -110,6 +110,7 @@ class FreshScanViewModel(
     }
 
     fun bindAuthenticatedUser(userId: String?, email: String?) {
+        activeSyncedUserEmail = email
         _uiState.update {
             it.copy(
                 connectedUserEmail = email,
@@ -118,7 +119,7 @@ class FreshScanViewModel(
         }
         if (userId.isNullOrBlank() || visualForecastRepository == null) {
             cloudSyncObserverJob?.cancel()
-            periodicCloudSyncJob?.cancel()
+            cloudSyncObserverJob = null
             activeSyncedUserId = null
             return
         }
@@ -126,9 +127,26 @@ class FreshScanViewModel(
             return
         }
         activeSyncedUserId = userId
+        startRealtimeForecastListener()
+    }
+
+    fun pauseCloudSyncInBackground() {
+        cloudSyncObserverJob?.cancel()
+        cloudSyncObserverJob = null
+    }
+
+    fun resumeCloudSyncInForeground() {
+        val userId = activeSyncedUserId
+        if (!userId.isNullOrBlank() && visualForecastRepository != null && cloudSyncObserverJob?.isActive != true) {
+            startRealtimeForecastListener()
+        }
+    }
+
+    private fun startRealtimeForecastListener() {
+        val forecastRepo = visualForecastRepository ?: return
         cloudSyncObserverJob?.cancel()
         cloudSyncObserverJob = viewModelScope.launch {
-            visualForecastRepository.observeCollectiveForecasts().collectLatest { rules ->
+            forecastRepo.observeCollectiveForecasts().collectLatest { rules ->
                 _uiState.update {
                     it.copy(
                         syncedForecastRulesCount = rules.size,
@@ -136,16 +154,6 @@ class FreshScanViewModel(
                         lastCloudSyncStatus = "Catálogo sincronizado (${rules.size} rangos)"
                     )
                 }
-            }
-        }
-        periodicCloudSyncJob?.cancel()
-        periodicCloudSyncJob = viewModelScope.launch {
-            while (isActive) {
-                visualForecastRepository.syncCollectiveForecasts()
-                _uiState.update {
-                    it.copy(syncedForecastRulesCount = localVisualForecastStore.getRulesCount())
-                }
-                delay(45_000L)
             }
         }
     }
@@ -159,7 +167,7 @@ class FreshScanViewModel(
                     _uiState.update {
                         it.copy(
                             syncedForecastRulesCount = total,
-                            lastCloudSyncStatus = "Sincronización completada ($total rangos)"
+                            lastCloudSyncStatus = "Sincronización puntual completada ($total rangos)"
                         )
                     }
                 }
@@ -777,7 +785,6 @@ class FreshScanViewModel(
         super.onCleared()
         cancelOngoingAnalysis()
         cloudSyncObserverJob?.cancel()
-        periodicCloudSyncJob?.cancel()
     }
 
     companion object {

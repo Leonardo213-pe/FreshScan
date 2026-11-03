@@ -12,10 +12,19 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve line number information for readable stack traces in production
+-keepattributes SourceFile,LineNumberTable
+-keepattributes Signature,InnerClasses,EnclosingMethod
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Keep FreshScan AI domain and remote models used with Firestore / JSON serialization
+-keep class com.example.domain.model.** { *; }
+-keep class com.example.data.remote.** { *; }
+
+# Keep Firebase Firestore model annotations and reflective getters/setters
+-keepclassmembers class * {
+    @com.google.firebase.firestore.PropertyName <fields>;
+    @com.google.firebase.firestore.PropertyName <methods>;
+}
+-dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
