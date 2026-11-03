@@ -43,6 +43,21 @@ app/src/main/java/com/example/
     └── viewmodel/           # FreshScanViewModel y FreshScanUiState
 ```
 
+## Optimizaciones de Rendimiento y Recursos
+
+- **Gestión Eficiente de Cámara y Ciclo de Vida (`CameraManager` y `CameraScreen`)**:
+  - Frecuencia de análisis en vivo adaptada a **650 ms** por frame para equilibrar fluidez visual y consumo de CPU/batería.
+  - Pausa automática del analizador (`setAnalysisPaused`) cuando el usuario captura o revisa una fotografía, o cuando la pantalla entra en pausa/segundo plano (`ON_PAUSE` / `ON_STOP`).
+  - Cierre explícito del `ExecutorService` (`analysisExecutor.shutdown()`) al desvincular la cámara (`unbind()`) y recreación segura bajo demanda.
+- **Sincronización Inteligente con Cloud Firestore (`FreshScanViewModel` y `MainActivity`)**:
+  - Uso exclusivo de suscripción reactiva en tiempo real (`observeCollectiveForecasts`) sin sondeos (*polling*) periódicos redundantes.
+  - Suspensión automática del listener cuando la aplicación pasa a segundo plano (`Lifecycle.Event.ON_STOP`) y reanudación al volver al primer plano (`Lifecycle.Event.ON_START`), con respaldo puntual (`refreshCollectiveKnowledgeIfNeeded`) únicamente cuando el flujo de datos está inactivo.
+- **Optimización de Memoria y Procesamiento de Imágenes (`ImageProcessor` y `LocalYoloDetector`)**:
+  - Escalado y rotación combinados en un **único paso de transformación** mediante una sola `Matrix` (`scaleAndRotate`), evitando asignaciones intermedias de `Bitmap`.
+  - Omisión del cálculo de hash perceptual durante el análisis de vista previa en vivo (`isLivePreview = true`) y reciclaje inmediato (`bitmap.recycle()`) de todos los bitmaps temporales dentro de bloques `finally`.
+- **Minificación y Reducción de Recursos en Producción (`R8` / `ProGuard`)**:
+  - Compilación `release` configurada con `isMinifyEnabled = true` e `isShrinkResources = true`, acompañada de reglas específicas en `app/proguard-rules.pro` para preservar modelos de dominio, serialización JSON y anotaciones `@PropertyName` / `@Keep` de Firebase Firestore.
+
 ---
 
 ## Requisitos y Compilación
@@ -53,7 +68,12 @@ app/src/main/java/com/example/
    ```bash
    ./gradlew :app:assembleDebug
    ```
-4. **Ejecutar pruebas unitarias y Robolectric**:
+4. **Compilar APK de producción (con R8 y reducción de recursos)**:
+   ```bash
+   ./gradlew :app:assembleRelease
+   ```
+5. **Ejecutar pruebas unitarias y Robolectric**:
    ```bash
    ./gradlew :app:testDebugUnitTest
    ```
+
