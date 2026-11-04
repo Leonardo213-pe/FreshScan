@@ -151,11 +151,11 @@ data class FoodProduct(
             ),
             FoodProduct(
                 id = "cucumber",
-                canonicalName = "Pepino",
-                aliases = listOf("pepino", "cucumber", "pepinillo"),
+                canonicalName = "Pepino / Pepinillo",
+                aliases = listOf("pepino", "pepinillo", "cucumber", "pepinillos", "pepino cohombro", "pepino holandes", "pickle"),
                 category = FoodCategory.VEGETABLE,
                 isClimacteric = false,
-                speciesRipenessCriteria = "Piel verde oscura firme y turgente (fresco), amarillamiento longitudinal o extremos blandos y arrugados por frío o deshidratación (sobremaduro/deteriorado)."
+                speciesRipenessCriteria = "En pepino y pepinillo (Cucumis sativus): piel verde oscura o verde brillante, firme, cilíndrica y turgente con posibles pequeños tubérculos superficiales propios de la variedad (fresco/maduro óptimo de consumo), amarillamiento longitudinal por senescencia o etileno (sobremaduro), extremos blandos, arrugados o hundimientos acuosos por daño por frío o pudrición (deteriorado)."
             ),
             FoodProduct(
                 id = "onion",

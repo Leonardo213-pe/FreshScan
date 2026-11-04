@@ -305,6 +305,15 @@ fun FreshScanApp(
                         if (!popped) {
                             navController.navigate(FreshScanRoutes.ROUTE_CAMERA)
                         }
+                    },
+                    onAnalysisCompleted = {
+                        val currentRoute = navController.currentBackStackEntry?.destination?.route
+                        if (currentRoute == FreshScanRoutes.ROUTE_PROCESSING) {
+                            navController.navigate(FreshScanRoutes.ROUTE_RESULTS) {
+                                popUpTo(FreshScanRoutes.ROUTE_CAMERA) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
                     }
                 )
             }

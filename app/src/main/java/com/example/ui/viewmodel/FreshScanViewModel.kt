@@ -314,11 +314,17 @@ class FreshScanViewModel(
         bitmap: Bitmap,
         onProceedToProcessing: () -> Unit
     ) {
-        if (!isRequestInFlight.compareAndSet(false, true)) return
+        activeAnalysisJob?.cancel()
+        isRequestInFlight.set(true)
+        _uiState.update {
+            it.copy(
+                processState = AnalysisProcessState.Loading,
+                isGeminiRefiningInBackground = false
+            )
+        }
         onProceedToProcessing()
         activeAnalysisJob = viewModelScope.launch {
             try {
-                _uiState.update { it.copy(processState = AnalysisProcessState.Loading) }
                 val learnedAnalysis = adaptiveVisualLearner.evaluateFromLearnedMemory(
                     bitmap = bitmap
                 )
@@ -352,17 +358,20 @@ class FreshScanViewModel(
         bitmap: Bitmap,
         onProceedToProcessing: () -> Unit
     ) {
-        if (!isRequestInFlight.compareAndSet(false, true)) return
+        activeAnalysisJob?.cancel()
+        isRequestInFlight.set(true)
+        _uiState.update {
+            it.copy(
+                processState = AnalysisProcessState.Loading,
+                isGeminiRefiningInBackground = false
+            )
+        }
         onProceedToProcessing()
         activeAnalysisJob = viewModelScope.launch {
             try {
-                _uiState.update {
-                    it.copy(
-                        processState = AnalysisProcessState.Loading,
-                        isGeminiRefiningInBackground = false
-                    )
+                val result = kotlinx.coroutines.withTimeout(ANALYSIS_WATCHDOG_TIMEOUT_MS) {
+                    analyzeFoodUseCase(bitmap = bitmap)
                 }
-                val result = analyzeFoodUseCase(bitmap = bitmap)
                 result.onSuccess { analysis ->
                     recordAndSyncLearnedForecast(bitmap, analysis)
                     _uiState.update {
@@ -374,12 +383,47 @@ class FreshScanViewModel(
                         )
                     }
                 }.onFailure { err ->
+                    val learnedFallback = adaptiveVisualLearner.evaluateFromLearnedMemory(bitmap = bitmap)
+                    if (learnedFallback.isReliableIdentification) {
+                        _uiState.update {
+                            it.copy(
+                                currentAnalysis = learnedFallback,
+                                selectedProductIndex = 0,
+                                processState = AnalysisProcessState.Success(learnedFallback),
+                                isGeminiRefiningInBackground = false,
+                                transientBannerMessage = "Respuesta recuperada de la memoria evolutiva local."
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                processState = AnalysisProcessState.Error(
+                                    err.localizedMessage ?: "Error al analizar la imagen con Gemini."
+                                ),
+                                isGeminiRefiningInBackground = false
+                            )
+                        }
+                    }
+                }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                val learnedFallback = adaptiveVisualLearner.evaluateFromLearnedMemory(bitmap = bitmap)
+                if (learnedFallback.isReliableIdentification) {
                     _uiState.update {
                         it.copy(
+                            currentAnalysis = learnedFallback,
+                            selectedProductIndex = 0,
+                            processState = AnalysisProcessState.Success(learnedFallback),
+                            isGeminiRefiningInBackground = false,
+                            transientBannerMessage = "Tiempo de espera agotado en nube; se usó la memoria evolutiva."
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isGeminiRefiningInBackground = false,
                             processState = AnalysisProcessState.Error(
-                                err.localizedMessage ?: "Error al analizar la imagen con Gemini."
-                            ),
-                            isGeminiRefiningInBackground = false
+                                "El análisis en la nube tardó demasiado en responder. Reintente o verifique su conexión a internet."
+                            )
                         )
                     }
                 }
@@ -405,33 +449,36 @@ class FreshScanViewModel(
         conditions: StorageConditions,
         onProceedToProcessing: () -> Unit
     ) {
-        if (!isRequestInFlight.compareAndSet(false, true)) return
-        onProceedToProcessing()
+        activeAnalysisJob?.cancel()
+        isRequestInFlight.set(true)
 
         val selectedIdx = _uiState.value.selectedProductIndex
         val allProducts = baseAnalysis.allProducts
         val targetItem = allProducts.getOrElse(selectedIdx) { baseAnalysis }
 
+        _uiState.update {
+            it.copy(
+                previousAutomaticAnalysis = it.previousAutomaticAnalysis ?: baseAnalysis,
+                processState = AnalysisProcessState.Loading
+            )
+        }
+        onProceedToProcessing()
+
         activeAnalysisJob = viewModelScope.launch {
             try {
-                _uiState.update {
-                    it.copy(
-                        previousAutomaticAnalysis = it.previousAutomaticAnalysis ?: baseAnalysis,
-                        processState = AnalysisProcessState.Loading
-                    )
-                }
-
                 val targetBitmap = if (allProducts.size > 1 && targetItem.boundingBox != null && targetItem.boundingBox.isValid) {
                     imageProcessor.cropToBoundingBox(bitmap, targetItem.boundingBox, paddingFraction = 0.16f)
                 } else {
                     bitmap
                 }
 
-                val result = improveAnalysisUseCase(
-                    bitmap = targetBitmap,
-                    previousAnalysis = targetItem,
-                    storageConditions = conditions
-                )
+                val result = kotlinx.coroutines.withTimeout(ANALYSIS_WATCHDOG_TIMEOUT_MS) {
+                    improveAnalysisUseCase(
+                        bitmap = targetBitmap,
+                        previousAnalysis = targetItem,
+                        storageConditions = conditions
+                    )
+                }
 
                 result.onSuccess { improvedItem ->
                     val preservedItem = improvedItem.copy(
@@ -462,6 +509,14 @@ class FreshScanViewModel(
                             )
                         )
                     }
+                }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                _uiState.update {
+                    it.copy(
+                        processState = AnalysisProcessState.Error(
+                            "El recálculo avanzado tardó demasiado en responder. Intente nuevamente."
+                        )
+                    )
                 }
             } finally {
                 isRequestInFlight.set(false)
@@ -695,6 +750,8 @@ class FreshScanViewModel(
     }
 
     companion object {
+        const val ANALYSIS_WATCHDOG_TIMEOUT_MS = 26_000L
+
         fun provideFactory(
             repository: FoodAnalysisRepository,
             consentStore: CloudConsentStore,

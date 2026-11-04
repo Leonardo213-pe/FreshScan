@@ -35,7 +35,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.ui.viewmodel.AnalysisProcessState
+import kotlinx.coroutines.delay
 
 @Composable
 fun ProcessingScreen(
@@ -58,11 +63,36 @@ fun ProcessingScreen(
     onCancelAnalysis: () -> Unit,
     onRetryAnalysis: () -> Unit,
     onReturnToCamera: () -> Unit,
+    onAnalysisCompleted: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler {
         onCancelAnalysis()
         onReturnToCamera()
+    }
+
+    var elapsedSeconds by remember(processState) { mutableIntStateOf(0) }
+
+    LaunchedEffect(processState, bitmap) {
+        when (processState) {
+            is AnalysisProcessState.Success -> {
+                onAnalysisCompleted()
+            }
+            is AnalysisProcessState.Idle -> {
+                if (bitmap != null) {
+                    delay(250L)
+                    onRetryAnalysis()
+                }
+            }
+            is AnalysisProcessState.Loading -> {
+                elapsedSeconds = 0
+                while (true) {
+                    delay(1_000L)
+                    elapsedSeconds++
+                }
+            }
+            is AnalysisProcessState.Error -> Unit
+        }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "scan_line")
@@ -137,19 +167,37 @@ fun ProcessingScreen(
                                 textAlign = TextAlign.Center
                             )
                             Text(
-                                text = stringResource(R.string.processing_subtitle),
+                                text = if (elapsedSeconds > 0) {
+                                    "${stringResource(R.string.processing_subtitle)} (${elapsedSeconds} s)"
+                                } else {
+                                    stringResource(R.string.processing_subtitle)
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
-                            TextButton(
-                                onClick = {
-                                    onCancelAnalysis()
-                                    onReturnToCamera()
-                                },
-                                modifier = Modifier.testTag("cancel_processing_button")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(stringResource(R.string.processing_cancel))
+                                TextButton(
+                                    onClick = {
+                                        onCancelAnalysis()
+                                        onReturnToCamera()
+                                    },
+                                    modifier = Modifier.testTag("cancel_processing_button")
+                                ) {
+                                    Text(stringResource(R.string.processing_cancel))
+                                }
+                                if (elapsedSeconds >= 8) {
+                                    OutlinedButton(
+                                        onClick = onRetryAnalysis,
+                                        modifier = Modifier.testTag("early_retry_processing_button")
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
+                                        Text(" Reintentar")
+                                    }
+                                }
                             }
                         }
 

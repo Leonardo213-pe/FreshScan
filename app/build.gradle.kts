@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.freshscanai.fxkmpq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "2.1"
+    versionCode = 5
+    versionName = "2.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -146,10 +146,23 @@ dependencies {
 
 afterEvaluate {
   val debugApkFile = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
-  val exportedApkFile = rootProject.file("FreshScanAI-v2.1.apk")
-  tasks.findByName("assembleDebug")?.doLast {
-    if (debugApkFile.exists()) {
-      debugApkFile.copyTo(exportedApkFile, overwrite = true)
+  val currentVersionName = android.defaultConfig.versionName ?: "2.3"
+  val rootDirFile = rootProject.projectDir
+  val exportedApkFile = rootProject.file("FreshScanAI-v$currentVersionName.apk")
+  tasks.findByName("assembleDebug")?.apply {
+    outputs.upToDateWhen {
+      val hasStaleApk = rootDirFile.listFiles()?.any {
+        it.name.startsWith("FreshScanAI-v") && it.name.endsWith(".apk") && it.name != exportedApkFile.name
+      } == true
+      exportedApkFile.exists() && !hasStaleApk
+    }
+    doLast {
+      rootDirFile.listFiles()
+        ?.filter { it.name.startsWith("FreshScanAI-v") && it.name.endsWith(".apk") && it.name != exportedApkFile.name }
+        ?.forEach { it.delete() }
+      if (debugApkFile.exists()) {
+        debugApkFile.copyTo(exportedApkFile, overwrite = true)
+      }
     }
   }
 }

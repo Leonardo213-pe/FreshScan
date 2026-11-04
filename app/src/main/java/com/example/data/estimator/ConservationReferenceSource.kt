@@ -344,6 +344,44 @@ object ConservationReferenceSource {
                 "Descartar si los floretes están negros, viscosos o desprenden olor fuerte desagradable."
             ),
             referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Brassica oleracea)"
+        ),
+        ConservationReferenceEntry(
+            productId = "cucumber",
+            productName = "Pepino / Pepinillo",
+            category = FoodCategory.VEGETABLE,
+            optimalTempRangeCelsius = 10..12,
+            chillingSensitiveBelowCelsius = 7,
+            typicalRipeningDaysRoomTemp = null,
+            ripeRoomTempDays = 2..4,
+            ripeRefrigeratedDays = 5..10,
+            cutRefrigeratedDays = 2..3,
+            idealStorageLocation = "Parte menos fría del refrigerador o cajón de verduras (7–10 °C) seco y envuelto ligeramente para evitar deshidratación.",
+            ethyleneNotes = "No climatérico pero muy sensible al etileno: se vuelve amarillo y blando si se almacena junto a tomates, plátanos o melones.",
+            generalReferenceSummary = "A temp. ambiente pierde turgencia en 2–4 días. En el cajón de verduras del refrigerador dura 5–10 días; bajo 7 °C por más de una semana puede sufrir picado acuoso por frío.",
+            qualityCheckTips = listOf(
+                "Los pepinillos y pepinos frescos deben sentirse firmes y rígidos de extremo a extremo.",
+                "Descartar si los extremos están blandos, mucosos o con depresiones acuosas traslúcidas."
+            ),
+            referenceCitation = "UC Davis Postharvest Center & USDA FoodKeeper (Cucumis sativus)"
+        ),
+        ConservationReferenceEntry(
+            productId = "onion",
+            productName = "Cebolla",
+            category = FoodCategory.VEGETABLE,
+            optimalTempRangeCelsius = 10..20,
+            chillingSensitiveBelowCelsius = null,
+            typicalRipeningDaysRoomTemp = null,
+            ripeRoomTempDays = 14..35,
+            ripeRefrigeratedDays = 10..21,
+            cutRefrigeratedDays = 4..7,
+            idealStorageLocation = "Despensa fresca, seca, oscura y bien ventilada fuera del refrigerador (excepto si ya está pelada o cortada).",
+            ethyleneNotes = "Almacenar separada de las papas, ya que la humedad de las papas acelera la brotación y pudrición de la cebolla.",
+            generalReferenceSummary = "Entera en lugar seco y ventilado dura de 2 a 5 semanas. Una vez cortada debe guardarse en envase hermético en el refrigerador por 4–7 días.",
+            qualityCheckTips = listOf(
+                "Túnicas secas y cuello bien cerrado indican buena curación poscosecha.",
+                "Descartar si el cuello está húmedo y blando o si presenta moho negro polvoriento profundo."
+            ),
+            referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Allium cepa)"
         )
     )
 

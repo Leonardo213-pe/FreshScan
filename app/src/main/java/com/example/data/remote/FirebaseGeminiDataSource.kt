@@ -12,6 +12,10 @@ import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.content
 import com.google.firebase.ai.type.generationConfig
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeout
 
 interface GeminiAnalysisDataSource {
@@ -27,54 +31,63 @@ interface GeminiAnalysisDataSource {
 
 class FirebaseGeminiDataSource : GeminiAnalysisDataSource {
 
+    private val networkCallScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val detectedItemSchema = Schema.obj(
         mapOf(
-            "producto" to Schema.string("Nombre específico de esta fruta o verdura individual en español (ej. Maracuyá, Plátano, Manzana, Palta)"),
-            "identificacion_confiable" to Schema.boolean("true ÚNICAMENTE si es realmente una fruta, verdura, hortaliza o tubérculo claramente visible"),
+            "producto" to Schema.string("Nombre en español de esta fruta o verdura (ej. Pepino, Pepinillo, Maracuyá, Plátano, Manzana)"),
+            "identificacion_confiable" to Schema.boolean("true si es una fruta, verdura u hortaliza real"),
             "madurez" to Schema.enumeration(
                 listOf("inmaduro", "en_maduracion", "maduro", "sobremaduro", "indeterminado"),
-                "Estado de madurez específico de ESTA unidad individual"
+                "Estado de madurez de esta unidad"
             ),
             "observaciones_visuales" to Schema.array(
-                Schema.string("Rasgo visual observado en esta unidad específica (color, manchas, piel)")
+                Schema.string("Rasgo visual observado")
             ),
-            "posible_deterioro" to Schema.boolean("true si esta unidad específica muestra deterioro visible"),
+            "posible_deterioro" to Schema.boolean("true si muestra deterioro visible"),
             "senales_deterioro" to Schema.array(
-                Schema.string("Señal de deterioro en esta unidad")
+                Schema.string("Señal de deterioro")
             ),
-            "vida_util_min" to Schema.integer("Días mínimos restantes para esta unidad"),
-            "vida_util_max" to Schema.integer("Días máximos restantes para esta unidad"),
-            "dias_hasta_madurez_min" to Schema.integer("Días mínimos hasta madurez óptima para esta unidad (0 si ya maduro)"),
-            "dias_hasta_madurez_max" to Schema.integer("Días máximos hasta madurez óptima para esta unidad (0 si ya maduro)"),
+            "vida_util_min" to Schema.integer("Días mínimos restantes"),
+            "vida_util_max" to Schema.integer("Días máximos restantes"),
+            "dias_hasta_madurez_min" to Schema.integer("Días mínimos hasta madurez óptima"),
+            "dias_hasta_madurez_max" to Schema.integer("Días máximos hasta madurez óptima"),
             "recomendaciones" to Schema.array(
-                Schema.string("Recomendación práctica para esta unidad")
+                Schema.string("Recomendación de conservación")
             ),
-            "box_ymin" to Schema.integer("Coordenada vertical superior normalizada (0 a 1000) de esta unidad"),
-            "box_xmin" to Schema.integer("Coordenada horizontal izquierda normalizada (0 a 1000) de esta unidad"),
-            "box_ymax" to Schema.integer("Coordenada vertical inferior normalizada (0 a 1000) de esta unidad"),
-            "box_xmax" to Schema.integer("Coordenada horizontal derecha normalizada (0 a 1000) de esta unidad")
+            "box_ymin" to Schema.integer("Coordenada superior (0..1000)"),
+            "box_xmin" to Schema.integer("Coordenada izquierda (0..1000)"),
+            "box_ymax" to Schema.integer("Coordenada inferior (0..1000)"),
+            "box_xmax" to Schema.integer("Coordenada derecha (0..1000)")
         ),
         optionalProperties = listOf(
+            "observaciones_visuales",
+            "senales_deterioro",
             "vida_util_min",
             "vida_util_max",
             "dias_hasta_madurez_min",
-            "dias_hasta_madurez_max"
+            "dias_hasta_madurez_max",
+            "recomendaciones",
+            "box_ymin",
+            "box_xmin",
+            "box_ymax",
+            "box_xmax"
         )
     )
 
     private val responseSchema = Schema.obj(
         mapOf(
-            "producto" to Schema.string("Nombre específico del alimento principal en español, o 'No se detectó fruta ni verdura' si no hay ningún alimento fresco en la imagen"),
-            "identificacion_confiable" to Schema.boolean("true ÚNICAMENTE si en la imagen aparece al menos una fruta, verdura o tubérculo real; false si es un teclado, mano vacía, objeto inanimado o imagen borrosa sin fruta"),
-            "multiples_productos_o_ambiguo" to Schema.boolean("true si hay múltiples frutas/verduras distintas o varias unidades"),
+            "producto" to Schema.string("Nombre específico del alimento principal en español (ej. Pepinillo, Pepino, Plátano, Maracuyá), o 'No se detectó fruta ni verdura'"),
+            "identificacion_confiable" to Schema.boolean("true ÚNICAMENTE si aparece al menos una fruta, verdura, hortaliza o tubérculo real"),
+            "multiples_productos_o_ambiguo" to Schema.boolean("true si hay múltiples frutas/verduras o varias unidades"),
             "madurez" to Schema.enumeration(
                 listOf("inmaduro", "en_maduracion", "maduro", "sobremaduro", "indeterminado"),
                 "Estado de madurez del alimento principal"
             ),
             "observaciones_visuales" to Schema.array(
-                Schema.string("Observación visual concreta sobre color, textura, brillo, manchas o firmeza aparente")
+                Schema.string("Observación visual sobre color, textura, firmeza o manchas")
             ),
-            "posible_deterioro" to Schema.boolean("true si se observan signos de moho, pudrición, hundimientos o daño severo"),
+            "posible_deterioro" to Schema.boolean("true si se observan signos de moho, pudrición o daño severo"),
             "senales_deterioro" to Schema.array(
                 Schema.string("Señal específica de deterioro visible")
             ),
@@ -95,14 +108,17 @@ class FirebaseGeminiDataSource : GeminiAnalysisDataSource {
             "box_xmax" to Schema.integer("Coordenada derecha normalizada (0 a 1000) del alimento principal"),
             "productos_detectados" to Schema.array(
                 detectedItemSchema,
-                "Lista completa de CADA fruta o verdura individual visible en la imagen con su propio recuadro (box_ymin..box_xmax) y su propia madurez individual"
+                "Lista de cada fruta o verdura individual visible en la imagen"
             )
         ),
         optionalProperties = listOf(
+            "senales_deterioro",
             "vida_util_min",
             "vida_util_max",
             "dias_hasta_madurez_min",
             "dias_hasta_madurez_max",
+            "estimacion_validada",
+            "limitaciones",
             "box_ymin",
             "box_xmin",
             "box_ymax",
@@ -115,30 +131,37 @@ class FirebaseGeminiDataSource : GeminiAnalysisDataSource {
         responseMimeType = "application/json"
         responseSchema = this@FirebaseGeminiDataSource.responseSchema
         temperature = 0.1f
-        maxOutputTokens = 1600
+        maxOutputTokens = 1024
     }
 
-    private val modelsByPriority: List<GenerativeModel> by lazy {
+    private data class PriorityModelEntry(
+        val model: GenerativeModel,
+        val timeoutMs: Long
+    )
+
+    private val modelsByPriority: List<PriorityModelEntry> by lazy {
         val aiService = Firebase.ai(backend = GenerativeBackend.googleAI())
         listOf(
-            aiService.generativeModel(
-                modelName = "gemini-2.5-flash",
-                generationConfig = config
+            PriorityModelEntry(
+                model = aiService.generativeModel(
+                    modelName = "gemini-3.8-flash",
+                    generationConfig = config
+                ),
+                timeoutMs = PRIMARY_MODEL_TIMEOUT_MS
             ),
-            aiService.generativeModel(
-                modelName = "gemini-3.8-flash",
-                generationConfig = config
-            ),
-            aiService.generativeModel(
-                modelName = "gemini-2.5-flash-lite",
-                generationConfig = config
+            PriorityModelEntry(
+                model = aiService.generativeModel(
+                    modelName = "gemini-3.5-flash-lite",
+                    generationConfig = config
+                ),
+                timeoutMs = FALLBACK_MODEL_TIMEOUT_MS
             )
         )
     }
 
     override fun warmUp() {
         try {
-            modelsByPriority.firstOrNull()?.hashCode()
+            modelsByPriority.firstOrNull()?.model?.hashCode()
         } catch (_: Exception) {
         }
     }
@@ -152,24 +175,37 @@ class FirebaseGeminiDataSource : GeminiAnalysisDataSource {
         val prompt = buildPrompt(storageConditions, manualProductOverride, learnedMemoryContext)
         var lastError: Throwable? = null
 
-        for (model in modelsByPriority) {
+        for (entry in modelsByPriority) {
+            val deferred = networkCallScope.async {
+                entry.model.generateContent(
+                    content {
+                        image(bitmap)
+                        text(prompt)
+                    }
+                )
+            }
             try {
-                val response = withTimeout(35_000L) {
-                    model.generateContent(
-                        content {
-                            image(bitmap)
-                            text(prompt)
-                        }
-                    )
+                val response = withTimeout(entry.timeoutMs) {
+                    deferred.await()
                 }
                 val text = response.text
                 if (!text.isNullOrBlank()) {
                     return text
                 }
             } catch (e: CancellationException) {
+                deferred.cancel()
+                if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                    lastError = e
+                    continue
+                }
                 throw e
             } catch (e: Throwable) {
+                deferred.cancel()
                 lastError = e
+            } finally {
+                if (deferred.isActive) {
+                    deferred.cancel()
+                }
             }
         }
         throw lastError ?: IllegalStateException("No se pudo obtener respuesta de Gemini")
@@ -213,19 +249,26 @@ class FirebaseGeminiDataSource : GeminiAnalysisDataSource {
 
         return """
             Eres un especialista en fisiología poscosecha e inocuidad alimentaria de frutas, verduras, hortalizas y tubérculos frescos.
-            Analiza cuidadosamente la imagen proporcionada y responde SIEMPRE en español neutro claro.
+            Analiza cuidadosamente la imagen proporcionada y responde SIEMPRE en español neutro claro y conciso.
             $overrideSection
             $learnedSection
             $storageSection
 
             REGLAS CRÍTICAS DE PRECISIÓN Y RECHAZO DE FALSOS POSITIVOS:
-            1. VERIFICACIÓN ESTRICTA DE PRESENCIA DE FRUTA O VERDURA: Si en la imagen NO hay ninguna fruta, verdura, hortaliza o tubérculo real (por ejemplo, si solo se ve una laptop, teclado, pantalla, mano vacía, mesa vacía, pared o cualquier objeto no alimenticio), DEBES devolver `identificacion_confiable = false`, `producto = "No se detectó fruta ni verdura"`, `madurez = "indeterminado"` y `productos_detectados = []`. ¡Jamás inventes una fruta ni la aproximes por color si no hay una fruta/verdura real!
-            2. IDENTIFICACIÓN EXACTA SIN FORZAR A OTRA ESPECIE: Identifica la fruta o verdura por su nombre exacto real (ej. Maracuyá, Granadilla, Pitahaya, Chirimoya, Lúcuma, Tuna, Plátano, Manzana, Naranja, Mandarina, Palta/Aguacate, Mango, Papaya, Tomate, etc.).
-               - Especial cuidado con el **Maracuyá** (*Passiflora edulis*): tiene forma ovalada/redondeada, cáscara amarilla o verde-amarillenta de superficie lisa cerosa (o ligeramente arrugada cuando está bien maduro y jugoso) sin los poros glandulares típicos de la naranja o mandarina. No confundas un maracuyá con naranja ni mandarina.
+            1. VERIFICACIÓN ESTRICTA DE PRESENCIA DE FRUTA O VERDURA: Si en la imagen NO hay ninguna fruta, verdura, hortaliza o tubérculo real (por ejemplo, laptop, teclado, pantalla, mano vacía, mesa vacía, pared u objeto no alimenticio), DEBES devolver `identificacion_confiable = false`, `producto = "No se detectó fruta ni verdura"`, `madurez = "indeterminado"` y `productos_detectados = []`.
+            2. IDENTIFICACIÓN EXACTA SIN FORZAR A OTRA ESPECIE: Identifica la fruta, verdura u hortaliza por su nombre real exacto en español (ej. Pepino, Pepinillo, Maracuyá, Granadilla, Pitahaya, Plátano, Manzana, Naranja, Mandarina, Palta/Aguacate, Mango, Papaya, Tomate, Pimiento, Brócoli, Zanahoria, Papa, Cebolla, etc.).
+               - **Pepino / Pepinillo** (*Cucumis sativus*): hortaliza cilíndrica alargada de piel verde oscura o verde con estrías/pequeños tubérculos superficiales; cuando está firme y verde es `madurez = "maduro"` (óptimo para consumo fresco), y si presenta amarillamiento longitudinal o extremos arrugados/blandos es `sobremaduro`.
+               - **Maracuyá** (*Passiflora edulis*): forma ovalada/redondeada, cáscara amarilla o verde-amarillenta de superficie lisa cerosa o ligeramente arrugada al madurar; no confundir con naranja ni mandarina.
             3. DETECCIÓN MULTI-PRODUCTO E INDIVIDUALIZACIÓN:
-               - Si aparecen 2 o más frutas/verduras en la imagen, marca `multiples_productos_o_ambiguo = true` e incluye CADA UNIDAD por separado dentro de `productos_detectados` (máximo 6 unidades principales).
-               - Para CADA elemento en `productos_detectados`, devuelve sus propias coordenadas exactas `box_ymin`, `box_xmin`, `box_ymax`, `box_xmax` en escala 0 a 1000, su propio estado de `madurez`, sus `observaciones_visuales` específicas y su propia estimación de `vida_util_min`/`vida_util_max`.
-            4. INOCUIDAD ALIMENTARIA: Sé prudente y científicamente honesto. Si observas moho, pudrición blanda, exudado o solanina (verde en papas), marca `posible_deterioro = true` y advierte no consumir.
+               - Si aparecen 2 o más frutas/verduras en la imagen, marca `multiples_productos_o_ambiguo = true` e incluye cada unidad en `productos_detectados` (máximo 6 unidades principales) con sus coordenadas `box_ymin`, `box_xmin`, `box_ymax`, `box_xmax` en escala 0 a 1000 y su `madurez`.
+               - Si solo hay 1 fruta o verdura, puedes omitir `productos_detectados` o incluir esa única unidad para responder más rápido.
+            4. INOCUIDAD ALIMENTARIA: Si observas moho, pudrición blanda, exudado o solanina (verde en papas), marca `posible_deterioro = true` y advierte no consumir.
         """.trimIndent()
     }
+
+    companion object {
+        const val PRIMARY_MODEL_TIMEOUT_MS = 14_000L
+        const val FALLBACK_MODEL_TIMEOUT_MS = 10_000L
+    }
 }
+

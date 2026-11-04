@@ -159,14 +159,17 @@ class ImageProcessor {
                 val px = ((gx + 0.5f) * width / gridX).toInt().coerceIn(0, width - 1)
                 val pixel = bitmap.getPixel(px, py)
                 Color.colorToHSV(pixel, hsv)
+                val h = hsv[0]
                 val s = hsv[1]
                 val v = hsv[2]
 
                 val satDiff = abs(s - avgBorderSat)
                 val valDiff = abs(v - avgBorderVal)
-                val isOrganicForeground = (s >= 0.24f && v in 0.12f..0.96f) ||
-                    (satDiff >= 0.18f && v in 0.14f..0.95f) ||
-                    (valDiff >= 0.25f && s >= 0.16f)
+                val isGreenProduceHue = h in 58f..175f && s >= 0.14f && v in 0.08f..0.92f
+                val isOrganicForeground = isGreenProduceHue ||
+                    (s >= 0.22f && v in 0.10f..0.96f) ||
+                    (satDiff >= 0.16f && v in 0.12f..0.95f) ||
+                    (valDiff >= 0.24f && s >= 0.14f)
 
                 if (isOrganicForeground) {
                     activeCells++
@@ -178,18 +181,28 @@ class ImageProcessor {
             }
         }
 
-        if (activeCells < 8 || maxFgX <= minFgX || maxFgY <= minFgY) {
+        if (activeCells < 12 || maxFgX <= minFgX || maxFgY <= minFgY) {
+            return null
+        }
+
+        val rawYmin = (minFgY.toFloat() / gridY).coerceIn(0f, 1f)
+        val rawXmin = (minFgX.toFloat() / gridX).coerceIn(0f, 1f)
+        val rawYmax = ((maxFgY + 1).toFloat() / gridY).coerceIn(0f, 1f)
+        val rawXmax = ((maxFgX + 1).toFloat() / gridX).coerceIn(0f, 1f)
+
+        // Evitar recortes excesivamente pequeños que pierdan el contexto morfológico (ej. pepinos alargados)
+        if ((rawXmax - rawXmin) < 0.22f || (rawYmax - rawYmin) < 0.22f) {
             return null
         }
 
         val rawBox = NormalizedBoundingBox(
-            ymin = (minFgY.toFloat() / gridY).coerceIn(0f, 1f),
-            xmin = (minFgX.toFloat() / gridX).coerceIn(0f, 1f),
-            ymax = ((maxFgY + 1).toFloat() / gridY).coerceIn(0f, 1f),
-            xmax = ((maxFgX + 1).toFloat() / gridX).coerceIn(0f, 1f)
+            ymin = rawYmin,
+            xmin = rawXmin,
+            ymax = rawYmax,
+            xmax = rawXmax
         )
 
-        return computeEffectiveCropBounds(bitmap, rawBox, paddingFraction = 0.12f)
+        return computeEffectiveCropBounds(bitmap, rawBox, paddingFraction = 0.16f)
     }
 
     fun computeEffectiveCropBounds(
