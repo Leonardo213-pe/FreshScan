@@ -249,6 +249,101 @@ object ConservationReferenceSource {
                 "Una vez cortado, retirar semillas y nervaduras blancas para prolongar su frescura 2–3 días."
             ),
             referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Capsicum annuum)"
+        ),
+        ConservationReferenceEntry(
+            productId = "passion_fruit",
+            productName = "Maracuyá / Granadilla",
+            category = FoodCategory.FRUIT,
+            optimalTempRangeCelsius = 7..10,
+            chillingSensitiveBelowCelsius = 6,
+            typicalRipeningDaysRoomTemp = 3..6,
+            ripeRoomTempDays = 3..6,
+            ripeRefrigeratedDays = 10..21,
+            cutRefrigeratedDays = 2..4,
+            idealStorageLocation = "Madurar a temperatura ambiente (18–22 °C) hasta que sea amarillo intenso; luego refrigerar (7–10 °C) para conservar su pulpa jugosa por 2 a 3 semanas.",
+            ethyleneNotes = "Fruta climatérica con alta producción de etileno. Las ligeras arrugas en la cáscara amarilla indican madurez y dulzor óptimos, no deterioro.",
+            generalReferenceSummary = "A temp. ambiente dura 3–6 días una vez amarillo. En refrigeración (7–10 °C) mantiene la calidad de su pulpa de 10 a 21 días.",
+            qualityCheckTips = listOf(
+                "Una cáscara ligeramente arrugada pero pesada al tacto indica máxima concentración de jugo aromático.",
+                "Descartar únicamente si presenta manchas fúngicas algodonosas, grietas con exudado fermentado o pérdida total de peso."
+            ),
+            referenceCitation = "UC Davis Postharvest Technology Center & FAO Tropical Fruits (Passiflora edulis)"
+        ),
+        ConservationReferenceEntry(
+            productId = "pineapple",
+            productName = "Piña / Ananá",
+            category = FoodCategory.FRUIT,
+            optimalTempRangeCelsius = 7..12,
+            chillingSensitiveBelowCelsius = 7,
+            typicalRipeningDaysRoomTemp = null,
+            ripeRoomTempDays = 2..4,
+            ripeRefrigeratedDays = 5..8,
+            cutRefrigeratedDays = 3..5,
+            idealStorageLocation = "A temperatura ambiente fresca por 2–4 días o en refrigeración (7–10 °C) una vez lista para consumir.",
+            ethyleneNotes = "No climatérica: no acumula más azúcares después de cosechada, aunque la cáscara puede cambiar de verde a amarillo.",
+            generalReferenceSummary = "Entera dura 2–4 días en mesón o 5–8 días refrigerada. Cortada en trozos en envase hermético dura 3–5 días en frío.",
+            qualityCheckTips = listOf(
+                "Aroma dulce en la base e interior dorado indican buen punto de cosecha.",
+                "Descartar si percibe burbujeo, olor alcohólico fermentado o manchas marrones acuosas en la base."
+            ),
+            referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Ananas comosus)"
+        ),
+        ConservationReferenceEntry(
+            productId = "grape",
+            productName = "Uva",
+            category = FoodCategory.FRUIT,
+            optimalTempRangeCelsius = 0..2,
+            chillingSensitiveBelowCelsius = null,
+            typicalRipeningDaysRoomTemp = null,
+            ripeRoomTempDays = 2..4,
+            ripeRefrigeratedDays = 7..14,
+            cutRefrigeratedDays = 2..3,
+            idealStorageLocation = "Refrigerar inmediatamente sin lavar en bolsa o envase ventilado; lavar solo justo antes de consumir.",
+            ethyleneNotes = "No climatérica. Sensible a la deshidratación del escobajo (tallo) y al moho gris (Botrytis).",
+            generalReferenceSummary = "En mesón dura 2–4 días; en refrigeración seca y ventilada conserva su firmeza de 1 a 2 semanas.",
+            qualityCheckTips = listOf(
+                "El escobajo verde y flexible es el mejor indicador de cosecha reciente.",
+                "Retirar cualquier uva partida o con moho para evitar que contamine el racimo."
+            ),
+            referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Vitis vinifera)"
+        ),
+        ConservationReferenceEntry(
+            productId = "carrot",
+            productName = "Zanahoria",
+            category = FoodCategory.VEGETABLE,
+            optimalTempRangeCelsius = 0..4,
+            chillingSensitiveBelowCelsius = null,
+            typicalRipeningDaysRoomTemp = null,
+            ripeRoomTempDays = 4..7,
+            ripeRefrigeratedDays = 14..28,
+            cutRefrigeratedDays = 5..10,
+            idealStorageLocation = "Cajón de verduras del refrigerador dentro de bolsa perforada, retirando las hojas verdes superiores si las tuviera.",
+            ethyleneNotes = "Sensible al etileno: almacenarla junto a manzanas o plátanos genera compuestos amargos (isocumarina).",
+            generalReferenceSummary = "A temp. ambiente se deshidrata y ablanda en 4–7 días. En refrigeración se conserva crujiente de 2 a 4 semanas.",
+            qualityCheckTips = listOf(
+                "Si perdió rigidez por deshidratación leve pero no tiene manchas, puede rehidratarse en agua fría.",
+                "Descartar si presenta zonas blandas acuosas o pardeamiento viscoso."
+            ),
+            referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Daucus carota)"
+        ),
+        ConservationReferenceEntry(
+            productId = "broccoli",
+            productName = "Brócoli",
+            category = FoodCategory.VEGETABLE,
+            optimalTempRangeCelsius = 0..2,
+            chillingSensitiveBelowCelsius = null,
+            typicalRipeningDaysRoomTemp = null,
+            ripeRoomTempDays = 1..2,
+            ripeRefrigeratedDays = 4..7,
+            cutRefrigeratedDays = 2..4,
+            idealStorageLocation = "Refrigeración inmediata (0–4 °C) con circulación de aire moderada y sin humedad libre acumulada.",
+            ethyleneNotes = "Muy sensible al etileno: amarillea rápidamente si se guarda cerca de manzanas, plátanos o tomates.",
+            generalReferenceSummary = "A temp. ambiente amarillea en 1–2 días. En refrigeración mantiene sus floretes verdes durante 4–7 días.",
+            qualityCheckTips = listOf(
+                "Floretes amarillos pero firmes y sin mal olor aún son seguros para consumo inmediato cocido.",
+                "Descartar si los floretes están negros, viscosos o desprenden olor fuerte desagradable."
+            ),
+            referenceCitation = "USDA FoodKeeper & UC Davis Postharvest Center (Brassica oleracea)"
         )
     )
 

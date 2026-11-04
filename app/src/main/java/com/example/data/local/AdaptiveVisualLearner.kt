@@ -8,6 +8,7 @@ import com.example.domain.model.FoodAnalysis
 import com.example.domain.model.FoodProduct
 import com.example.domain.model.NormalizedBoundingBox
 import com.example.domain.model.RipenessState
+import com.example.domain.model.ShelfLifeEstimate
 import com.example.domain.model.StorageConditions
 import com.example.domain.model.VisualFeatureVector
 import com.example.domain.model.VisualForecastRule
@@ -16,28 +17,27 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-class LocalYoloDetector(
+/**
+ * Motor de Aprendizaje Visual Evolutivo que inicia vacío (sin heurísticas fijas que inventen frutas)
+ * y aprende progresivamente de cada análisis realizado por Gemini Vision y de cada corrección
+ * manual del usuario, sincronizando su memoria con el almacenamiento local y Cloud Firestore.
+ */
+class AdaptiveVisualLearner(
     private val shelfLifeEstimator: ShelfLifeEstimator = ShelfLifeEstimator(),
     private val imageProcessor: ImageProcessor = ImageProcessor(),
     private val visualForecastStore: LocalVisualForecastStore = LocalVisualForecastStore()
 ) {
 
-    data class YoloDetectionResult(
-        val product: FoodProduct,
-        val ripenessState: RipenessState,
-        val confidence: Float,
+    data class SpatialFeatureResult(
         val boundingBox: NormalizedBoundingBox,
-        val hasDeterioration: Boolean,
-        val deteriorationSigns: List<String>,
-        val visualObservations: List<String>,
-        val inferenceTimeMs: Long,
         val featureVector: VisualFeatureVector,
-        val matchedRangeRule: VisualForecastRule? = null
+        val hasOrganicForeground: Boolean
     )
 
     private data class LearnedVisualSignature(
         val perceptualHash: Long,
-        val product: FoodProduct,
+        val productName: String,
+        val matchedProduct: FoodProduct?,
         val ripenessState: RipenessState,
         val hasDeterioration: Boolean
     )
@@ -49,9 +49,14 @@ class LocalYoloDetector(
         bitmap: Bitmap,
         geminiAnalysis: FoodAnalysis
     ): VisualFeatureVector? {
+        if (!geminiAnalysis.isReliableIdentification) return null
+        val displayName = geminiAnalysis.displayProductName.trim()
+        if (displayName.isBlank() || displayName.equals("Producto no identificado", ignoreCase = true)) {
+            return null
+        }
+
         val matched = geminiAnalysis.matchedCatalogProduct
-            ?: FoodProduct.findMatchingProduct(geminiAnalysis.displayProductName)
-            ?: return null
+            ?: FoodProduct.findMatchingProduct(displayName)
 
         val hash = imageProcessor.computePerceptualHash(bitmap)
         if (hash != 0L) {
@@ -62,12 +67,13 @@ class LocalYoloDetector(
                 0,
                 LearnedVisualSignature(
                     perceptualHash = hash,
-                    product = matched,
+                    productName = displayName,
+                    matchedProduct = matched,
                     ripenessState = geminiAnalysis.ripenessState,
                     hasDeterioration = geminiAnalysis.hasVisibleDeterioration
                 )
             )
-            while (learnedSignatures.size > 50) {
+            while (learnedSignatures.size > 100) {
                 learnedSignatures.removeAt(learnedSignatures.lastIndex)
             }
         }
@@ -77,7 +83,7 @@ class LocalYoloDetector(
             userId = "local_device",
             featureVector = featureVector,
             analysis = geminiAnalysis
-        ).copy(id = "local_${matched.id}_${geminiAnalysis.ripenessState.name.lowercase()}")
+        )
         visualForecastStore.upsertLocalRule(localRule)
         return featureVector
     }
@@ -96,58 +102,122 @@ class LocalYoloDetector(
     }
 
     fun extractVisualFeatureVector(bitmap: Bitmap): VisualFeatureVector {
-        return runSpatialAndChromaticDetection(bitmap, null, isLivePreview = true).featureVector
+        return extractSpatialFeatures(bitmap).featureVector
     }
 
-    fun detectInstant(
+    fun buildLearnedPromptHintForGemini(bitmap: Bitmap): String {
+        val spatial = extractSpatialFeatures(bitmap)
+        val exactSig = findLearnedSignature(bitmap)
+        val similarRules = visualForecastStore.findSimilarLearnedRulesForPrompt(
+            features = spatial.featureVector,
+            maxExamples = 4
+        )
+        if (exactSig == null && similarRules.isEmpty()) return ""
+
+        val lines = mutableListOf<String>()
+        if (exactSig != null) {
+            lines.add(
+                "- Firma visual muy similar registrada previamente en este dispositivo: '${exactSig.productName}' (madurez: ${exactSig.ripenessState.displayName})."
+            )
+        }
+        for (rule in similarRules) {
+            lines.add(
+                "- Ejemplo aprendido en memoria evolutiva (${rule.confirmations} confirmaciones): '${rule.productName}' en estado ${rule.parsedRipenessState().displayName} (vida útil ${rule.remainingShelfLifeDaysMin}-${rule.remainingShelfLifeDaysMax} días)."
+            )
+        }
+        return """
+            MEMORIA DE APRENDIZAJE EVOLUTIVO (patrones aprendidos previamente de escaneos y correcciones del usuario):
+            ${lines.joinToString("\n")}
+            Ten en cuenta esta memoria aprendida si coincide visualmente con el ejemplar de la foto, pero prioriza siempre lo que realmente observes en la imagen actual (y si no hay ninguna fruta o verdura en la imagen, marca identificacion_confiable = false).
+        """.trimIndent()
+    }
+
+    /**
+     * Evalúa una imagen utilizando únicamente el conocimiento que el sistema ya haya aprendido
+     * de Gemini o de correcciones manuales (sin inventar frutas cuando la memoria está vacía).
+     */
+    fun evaluateFromLearnedMemory(
         bitmap: Bitmap,
         storageConditions: StorageConditions? = null,
-        manualProductOverride: String? = null,
-        isPreliminaryForHybrid: Boolean = true,
-        isLivePreview: Boolean = false
+        manualProductOverride: String? = null
     ): FoodAnalysis {
         val startNanos = System.nanoTime()
-        val detection = runSpatialAndChromaticDetection(bitmap, manualProductOverride, isLivePreview)
+        val spatial = extractSpatialFeatures(bitmap)
         val elapsedMs = ((System.nanoTime() - startNanos) / 1_000_000L).coerceAtLeast(8L)
 
-        val matchedRule = detection.matchedRangeRule
-        val matchedProduct = if (!manualProductOverride.isNullOrBlank()) {
-            FoodProduct.findMatchingProduct(manualProductOverride) ?: detection.product
-        } else {
-            detection.product
+        val learnedSig = findLearnedSignature(bitmap)
+        val matchedRule = visualForecastStore.findBestMatchingRule(
+            features = spatial.featureVector,
+            hintProductName = manualProductOverride ?: learnedSig?.productName
+        )
+
+        val resolvedProductName = manualProductOverride?.takeIf { it.isNotBlank() }
+            ?: learnedSig?.productName
+            ?: matchedRule?.productName
+
+        if (resolvedProductName.isNullOrBlank()) {
+            val emptyEstimate = ShelfLifeEstimate(
+                isValidatedEstimate = false,
+                predictionLimitations = listOf(
+                    "Este alimento aún no ha sido registrado en la memoria evolutiva local. Analícelo con Gemini en línea para que el sistema aprenda sus rasgos."
+                )
+            )
+            val unknownAnalysis = FoodAnalysis(
+                rawProductName = "Sin coincidencia en memoria aprendida",
+                isReliableIdentification = false,
+                ripenessState = RipenessState.UNDETERMINED,
+                visualObservations = listOf(
+                    "El modelo evolutivo inicia vacío y aprende con cada escaneo de Gemini.",
+                    "Conéctese a internet para analizar este alimento con Gemini y guardarlo automáticamente en la memoria evolutiva."
+                ),
+                shelfLifeEstimate = emptyEstimate,
+                recommendations = listOf(
+                    "Realice un escaneo con Gemini Vision para incorporar esta fruta o verdura a la base de aprendizaje."
+                ),
+                limitations = emptyEstimate.predictionLimitations,
+                boundingBox = spatial.boundingBox,
+                inferenceTimeMs = elapsedMs,
+                analysisEngineSource = "Memoria Evolutiva (Pendiente de aprendizaje)"
+            )
+            return unknownAnalysis.copy(detectedItems = listOf(unknownAnalysis))
         }
 
-        val effectiveName = manualProductOverride?.takeIf { it.isNotBlank() }
-            ?: matchedRule?.productName
-            ?: matchedProduct.canonicalName
+        val matchedProduct = FoodProduct.findMatchingProduct(resolvedProductName)
+            ?: learnedSig?.matchedProduct
+        val ripenessState = matchedRule?.parsedRipenessState()
+            ?: learnedSig?.ripenessState
+            ?: RipenessState.RIPE
+        val hasDeterioration = matchedRule?.hasVisibleDeterioration
+            ?: learnedSig?.hasDeterioration
+            ?: (spatial.featureVector.spotPermille > 260)
+
+        val deteriorationSigns = matchedRule?.deteriorationSigns?.takeIf { it.isNotEmpty() }
+            ?: if (hasDeterioration) {
+                listOf("Manchas oscuras o signos superficiales detectados según memoria aprendida.")
+            } else {
+                emptyList()
+            }
 
         val shelfLifeEstimate = shelfLifeEstimator.estimate(
             matchedProduct = matchedProduct,
             isReliableIdentification = true,
             multipleOrAmbiguousItems = false,
-            ripenessState = detection.ripenessState,
-            hasVisibleDeterioration = detection.hasDeterioration,
-            deteriorationSigns = detection.deteriorationSigns,
+            ripenessState = ripenessState,
+            hasVisibleDeterioration = hasDeterioration,
+            deteriorationSigns = deteriorationSigns,
             geminiRipeningDaysMin = matchedRule?.daysToRipenMin?.takeIf { it >= 0 }?.toInt(),
             geminiRipeningDaysMax = matchedRule?.daysToRipenMax?.takeIf { it >= 0 }?.toInt(),
             geminiShelfLifeMin = matchedRule?.remainingShelfLifeDaysMin?.toInt(),
             geminiShelfLifeMax = matchedRule?.remainingShelfLifeDaysMax?.toInt(),
             geminiLimitations = listOf(
-                when {
-                    isPreliminaryForHybrid ->
-                        "Evaluación preliminar rápida basada en la superficie visible mientras se completa el análisis detallado."
-                    else ->
-                        "Estimación calculada a partir del color y aspecto superficial visible en la fotografía."
-                }
+                "Estimación recuperada de la memoria evolutiva aprendida previamente con Gemini."
             ),
             storageConditions = storageConditions
         )
 
         val referenceEntry = ConservationReferenceSource.findByProduct(matchedProduct)
-        val recommendations = if (matchedRule != null && matchedRule.recommendations.isNotEmpty()) {
-            matchedRule.recommendations
-        } else {
-            buildList {
+        val recommendations = matchedRule?.recommendations?.takeIf { it.isNotEmpty() }
+            ?: buildList {
                 if (referenceEntry != null) {
                     add(referenceEntry.idealStorageLocation)
                     add(referenceEntry.ethyleneNotes)
@@ -155,45 +225,38 @@ class LocalYoloDetector(
                     add("Conservar en ambiente fresco, limpio y seco, verificando su textura antes de consumir.")
                 }
             }
-        }
 
-        val engineLabel = when {
-            isPreliminaryForHybrid ->
-                "Completando análisis detallado..."
-            else ->
-                "Diagnóstico visual completado"
-        }
+        val observations = matchedRule?.visualObservations?.takeIf { it.isNotEmpty() }
+            ?: listOf(
+                "Identificado como $resolvedProductName a partir de los patrones aprendidos por el sistema."
+            )
 
         val singleAnalysis = FoodAnalysis(
-            rawProductName = effectiveName,
+            rawProductName = resolvedProductName,
             manuallyCorrectedName = manualProductOverride?.takeIf { it.isNotBlank() },
             matchedCatalogProduct = matchedProduct,
             isReliableIdentification = true,
             multipleOrAmbiguousItems = false,
-            ripenessState = detection.ripenessState,
-            visualObservations = detection.visualObservations,
-            hasVisibleDeterioration = detection.hasDeterioration,
-            deteriorationSigns = detection.deteriorationSigns,
+            ripenessState = ripenessState,
+            visualObservations = observations,
+            hasVisibleDeterioration = hasDeterioration,
+            deteriorationSigns = deteriorationSigns,
             shelfLifeEstimate = shelfLifeEstimate,
             recommendations = recommendations,
             limitations = shelfLifeEstimate.predictionLimitations,
             appliedStorageConditions = storageConditions?.takeIf { it.hasAnyInput() },
             isAdvancedAnalysis = storageConditions?.hasAnyInput() == true,
-            boundingBox = detection.boundingBox,
-            isPreliminaryYoloResult = isPreliminaryForHybrid,
-            yoloConfidence = detection.confidence,
-            yoloInferenceTimeMs = elapsedMs,
-            analysisEngineSource = engineLabel
+            boundingBox = spatial.boundingBox,
+            isPreliminaryResult = false,
+            localConfidence = 0.96f,
+            inferenceTimeMs = elapsedMs,
+            analysisEngineSource = "Memoria Evolutiva Aprendida"
         )
 
         return singleAnalysis.copy(detectedItems = listOf(singleAnalysis))
     }
 
-    private fun runSpatialAndChromaticDetection(
-        bitmap: Bitmap,
-        manualProductOverride: String?,
-        isLivePreview: Boolean = false
-    ): YoloDetectionResult {
+    fun extractSpatialFeatures(bitmap: Bitmap): SpatialFeatureResult {
         val width = bitmap.width.coerceAtLeast(1)
         val height = bitmap.height.coerceAtLeast(1)
         val gridX = min(28, width)
@@ -212,9 +275,6 @@ class LocalYoloDetector(
         var greenPixels = 0
         var purpleDarkPixels = 0
         var brownSpotPixels = 0
-        var totalSampled = 0
-        var sumSaturation = 0f
-        var sumValue = 0f
 
         for (gy in 0 until gridY) {
             val py = ((gy + 0.5f) * height / gridY).toInt().coerceIn(0, height - 1)
@@ -225,10 +285,6 @@ class LocalYoloDetector(
                 val h = hsv[0]
                 val s = hsv[1]
                 val v = hsv[2]
-
-                totalSampled++
-                sumSaturation += s
-                sumValue += v
 
                 val centerBias = 1f - (abs(gx - gridX / 2f) / (gridX / 2f) * 0.4f + abs(gy - gridY / 2f) / (gridY / 2f) * 0.4f)
                 val isForeground = (s > 0.22f && v in 0.12f..0.96f) || (centerBias > 0.68f && v in 0.15f..0.90f)
@@ -258,7 +314,8 @@ class LocalYoloDetector(
             }
         }
 
-        val boundingBox = if (fgCount >= 6 && maxFgX > minFgX && maxFgY > minFgY) {
+        val segmentedBox = imageProcessor.segmentProduceRegionBounds(bitmap)
+        val boundingBox = segmentedBox ?: if (fgCount >= 6 && maxFgX > minFgX && maxFgY > minFgY) {
             NormalizedBoundingBox(
                 ymin = (minFgY.toFloat() / gridY - 0.04f).coerceIn(0.06f, 0.78f),
                 xmin = (minFgX.toFloat() / gridX - 0.04f).coerceIn(0.06f, 0.78f),
@@ -293,85 +350,10 @@ class LocalYoloDetector(
             aspectRatioPermille = aspectRatioPermille
         )
 
-        val matchedRangeRule = visualForecastStore.findBestMatchingRule(featureVector, manualProductOverride)
-        val learned = if (isLivePreview) null else findLearnedSignature(bitmap)
-        val forcedProduct = FoodProduct.findMatchingProduct(manualProductOverride)
-
-        val detectedProduct = forcedProduct
-            ?: matchedRangeRule?.let { FoodProduct.findMatchingProduct(it.productName) ?: FoodProduct.findMatchingProduct(it.productKey) }
-            ?: learned?.product
-            ?: when {
-                yellowRatio >= 0.34f && greenRatio >= 0.12f -> FoodProduct.findMatchingProduct("Plátano")!!
-                yellowRatio >= 0.40f -> FoodProduct.findMatchingProduct("Plátano")!!
-                redRatio >= 0.42f && greenRatio < 0.15f -> FoodProduct.findMatchingProduct("Manzana")!!
-                redRatio >= 0.28f && orangeRatio >= 0.15f -> FoodProduct.findMatchingProduct("Tomate")!!
-                orangeRatio >= 0.38f -> FoodProduct.findMatchingProduct("Naranja")!!
-                orangeRatio >= 0.24f && (yellowRatio >= 0.20f || greenRatio >= 0.18f) -> FoodProduct.findMatchingProduct("Mango")!!
-                purpleRatio >= 0.32f && greenRatio >= 0.12f -> FoodProduct.findMatchingProduct("Palta")!!
-                greenRatio >= 0.45f -> FoodProduct.findMatchingProduct("Palta")!!
-                else -> FoodProduct.findMatchingProduct("Manzana")!!
-            }
-
-        val ripenessState = matchedRangeRule?.parsedRipenessState()
-            ?: learned?.ripenessState
-            ?: when {
-                spotRatio > 0.24f -> RipenessState.OVERRIPE
-                greenRatio > 0.58f && detectedProduct.isClimacteric -> RipenessState.UNRIPE
-                greenRatio in 0.28f..0.58f && (yellowRatio > 0.15f || orangeRatio > 0.15f || redRatio > 0.15f) -> RipenessState.RIPENING
-                else -> RipenessState.RIPE
-            }
-
-        val hasDeterioration = matchedRangeRule?.hasVisibleDeterioration
-            ?: learned?.hasDeterioration
-            ?: (spotRatio > 0.26f)
-
-        val deteriorationSigns = when {
-            matchedRangeRule != null && matchedRangeRule.deteriorationSigns.isNotEmpty() ->
-                matchedRangeRule.deteriorationSigns
-            hasDeterioration ->
-                listOf("Zonas oscuras o magulladuras superficiales detectadas en la cara visible.")
-            else ->
-                emptyList()
-        }
-
-        val dominantColorLabel = when {
-            yellowRatio >= redRatio && yellowRatio >= greenRatio && yellowRatio >= orangeRatio -> "tonalidad amarilla dominante"
-            redRatio >= orangeRatio && redRatio >= greenRatio -> "coloración rojiza superficial uniforme"
-            orangeRatio >= greenRatio -> "pigmentación naranja cálida"
-            greenRatio >= purpleRatio -> "cobertura verde predominante"
-            else -> "tonalidad oscura característica"
-        }
-
-        val confidence = if (matchedRangeRule != null || learned != null) {
-            0.98f
-        } else {
-            (0.86f + min(0.11f, (fgCount.toFloat() / max(1, totalSampled)) * 0.14f)).coerceIn(0.84f, 0.97f)
-        }
-
-        val visualObservations = if (matchedRangeRule != null && matchedRangeRule.visualObservations.isNotEmpty()) {
-            matchedRangeRule.visualObservations
-        } else {
-            buildList {
-                add("Ejemplar de ${detectedProduct.canonicalName} con $dominantColorLabel.")
-                if (spotRatio in 0.08f..0.26f) {
-                    add("Se observan ligeras pecas de maduración natural en la superficie.")
-                } else if (!hasDeterioration) {
-                    add("Superficie íntegra sin signos de descomposición severa en la cara visible.")
-                }
-            }
-        }
-
-        return YoloDetectionResult(
-            product = detectedProduct,
-            ripenessState = ripenessState,
-            confidence = confidence,
+        return SpatialFeatureResult(
             boundingBox = boundingBox,
-            hasDeterioration = hasDeterioration,
-            deteriorationSigns = deteriorationSigns,
-            visualObservations = visualObservations,
-            inferenceTimeMs = 18L,
             featureVector = featureVector,
-            matchedRangeRule = matchedRangeRule
+            hasOrganicForeground = fgCount >= 8
         )
     }
 }

@@ -33,11 +33,11 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.data.local.AdaptiveVisualLearner
 import com.example.data.local.AndroidNetworkMonitor
+import com.example.data.local.LearnedDatasetManager
 import com.example.data.local.LocalVisualForecastStore
-import com.example.data.local.LocalYoloDetector
 import com.example.data.local.SharedPrefsCloudConsentStore
-import com.example.data.local.YoloDatasetManager
 import com.example.data.remote.FirebaseGeminiRepository
 import com.example.data.remote.VisualForecastRepository
 import com.example.security.attemptAutoSignIn
@@ -116,12 +116,16 @@ fun FreshScanAuthRoot() {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     val appContext = context.applicationContext
+                    val localForecastStore = LocalVisualForecastStore(appContext)
+                    val adaptiveLearner = AdaptiveVisualLearner(
+                        visualForecastStore = localForecastStore
+                    )
                     val repo = FirebaseGeminiRepository(
-                        networkMonitor = AndroidNetworkMonitor(appContext)
+                        networkMonitor = AndroidNetworkMonitor(appContext),
+                        adaptiveLearner = adaptiveLearner
                     )
                     val consentStore = SharedPrefsCloudConsentStore(appContext)
-                    val datasetManager = YoloDatasetManager(appContext)
-                    val localForecastStore = LocalVisualForecastStore(appContext)
+                    val datasetManager = LearnedDatasetManager(appContext)
                     val databaseId = appContext.getString(R.string.firestore_database_id)
                     val firestore = FirebaseFirestore.getInstance(databaseId)
                     val forecastRepository = VisualForecastRepository(
@@ -132,10 +136,8 @@ fun FreshScanAuthRoot() {
                         repository = repo,
                         consentStore = consentStore,
                         localVisualForecastStore = localForecastStore,
-                        localYoloDetector = LocalYoloDetector(
-                            visualForecastStore = localForecastStore
-                        ),
-                        yoloDatasetManager = datasetManager,
+                        adaptiveVisualLearner = adaptiveLearner,
+                        learnedDatasetManager = datasetManager,
                         visualForecastRepository = forecastRepository
                     ) as T
                 }
@@ -270,7 +272,10 @@ fun FreshScanApp(
                 HomeScreen(
                     onStartCameraScan = {
                         viewModel.discardCurrentPhoto()
-                        navController.navigate(FreshScanRoutes.ROUTE_CAMERA)
+                        val popped = navController.popBackStack(FreshScanRoutes.ROUTE_CAMERA, inclusive = false)
+                        if (!popped) {
+                            navController.navigate(FreshScanRoutes.ROUTE_CAMERA)
+                        }
                     },
                     onOpenConservationGuide = {
                         navController.navigate(FreshScanRoutes.ROUTE_CONSERVATION_GUIDE)
@@ -295,7 +300,8 @@ fun FreshScanApp(
                         }
                     },
                     onReturnToCamera = {
-                        val popped = navController.popBackStack()
+                        viewModel.discardCurrentPhoto()
+                        val popped = navController.popBackStack(FreshScanRoutes.ROUTE_CAMERA, inclusive = false)
                         if (!popped) {
                             navController.navigate(FreshScanRoutes.ROUTE_CAMERA)
                         }
@@ -314,17 +320,19 @@ fun FreshScanApp(
                             navController.navigate(FreshScanRoutes.ROUTE_ADVANCED_ANALYSIS)
                         },
                         onRestorePreviousResult = viewModel::restorePreviousAutomaticAnalysis,
-                        onCorrectProduct = { newName, reanalyze ->
+                        onCorrectProduct = { newName, newRipeness, reanalyze ->
                             viewModel.correctRecognizedProduct(
                                 newProductName = newName,
+                                newRipenessState = newRipeness,
                                 reanalyzeWithGemini = reanalyze,
                                 targetProductIndex = uiState.selectedProductIndex
                             )
                         },
                         onNewScanClick = {
                             viewModel.discardCurrentPhoto()
-                            navController.navigate(FreshScanRoutes.ROUTE_CAMERA) {
-                                popUpTo(FreshScanRoutes.ROUTE_CAMERA) { inclusive = true }
+                            val popped = navController.popBackStack(FreshScanRoutes.ROUTE_CAMERA, inclusive = false)
+                            if (!popped) {
+                                navController.navigate(FreshScanRoutes.ROUTE_CAMERA)
                             }
                         },
                         selectedProductIndex = uiState.selectedProductIndex,
@@ -333,8 +341,9 @@ fun FreshScanApp(
                     )
                 } else {
                     LaunchedEffect(Unit) {
-                        navController.navigate(FreshScanRoutes.ROUTE_CAMERA) {
-                            popUpTo(FreshScanRoutes.ROUTE_CAMERA) { inclusive = true }
+                        val popped = navController.popBackStack(FreshScanRoutes.ROUTE_CAMERA, inclusive = false)
+                        if (!popped) {
+                            navController.navigate(FreshScanRoutes.ROUTE_CAMERA)
                         }
                     }
                 }

@@ -10,21 +10,8 @@ interface FoodAnalysisRepository {
         bitmap: Bitmap,
         storageConditions: StorageConditions? = null,
         manualProductOverride: String? = null,
-        yoloHintBox: NormalizedBoundingBox? = null
+        regionBox: NormalizedBoundingBox? = null
     ): Result<FoodAnalysis>
-
-    suspend fun analyzeFastRecognition(
-        bitmap: Bitmap,
-        yoloHintBox: NormalizedBoundingBox? = null,
-        yoloHintLabel: String? = null
-    ): Result<FoodAnalysis> {
-        return analyzeFood(
-            bitmap = bitmap,
-            storageConditions = null,
-            manualProductOverride = yoloHintLabel,
-            yoloHintBox = yoloHintBox
-        )
-    }
 
     fun warmUp() {}
 }

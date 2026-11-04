@@ -126,14 +126,16 @@ class ExampleRobolectricTest {
         assertEquals(1, viewModel.uiState.value.selectedProductIndex)
 
         viewModel.correctRecognizedProduct(
-            newProductName = "Manzana",
+            newProductName = "Maracuyá / Granadilla",
+            newRipenessState = com.example.domain.model.RipenessState.RIPE,
             reanalyzeWithGemini = false,
             targetProductIndex = 1
         )
 
         val updatedAnalysis = viewModel.uiState.value.currentAnalysis!!
         assertEquals("Plátano / Banano", updatedAnalysis.allProducts[0].displayProductName)
-        assertEquals("Manzana", updatedAnalysis.allProducts[1].displayProductName)
+        assertEquals("Maracuyá / Granadilla", updatedAnalysis.allProducts[1].displayProductName)
+        assertEquals(com.example.domain.model.RipenessState.RIPE, updatedAnalysis.allProducts[1].ripenessState)
 
         composeTestRule.setContent {
             FreshScanTheme {
@@ -143,7 +145,7 @@ class ExampleRobolectricTest {
                     hasPreviousAutomaticResult = false,
                     onImproveAnalysisClick = {},
                     onRestorePreviousResult = {},
-                    onCorrectProduct = { _, _ -> },
+                    onCorrectProduct = { _, _, _ -> },
                     onNewScanClick = {},
                     selectedProductIndex = 1,
                     onSelectProductIndex = { viewModel.selectProduct(it) }

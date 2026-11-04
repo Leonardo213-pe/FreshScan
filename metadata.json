@@ -1,6 +1,6 @@
 {
   "name": "FreshScan AI",
-  "description": "Inspección visual de frutas y verduras con inteligencia artificial híbrida (YOLO + Gemini), estimación de vida útil poscosecha y sincronización colectiva.",
+  "description": "Inspección visual de frutas y verduras con segmentación inteligente, análisis multimodal con Gemini y aprendizaje evolutivo continuo en la nube y en el dispositivo.",
   "requestFramePermissions": [
     "camera"
   ],

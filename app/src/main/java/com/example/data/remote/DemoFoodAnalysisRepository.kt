@@ -16,7 +16,7 @@ class DemoFoodAnalysisRepository(
         bitmap: Bitmap,
         storageConditions: StorageConditions?,
         manualProductOverride: String?,
-        yoloHintBox: NormalizedBoundingBox?
+        regionBox: NormalizedBoundingBox?
     ): Result<FoodAnalysis> {
         if (shouldFail) {
             return Result.failure(IllegalStateException(failureMessage))
@@ -33,19 +33,6 @@ class DemoFoodAnalysisRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    override suspend fun analyzeFastRecognition(
-        bitmap: Bitmap,
-        yoloHintBox: NormalizedBoundingBox?,
-        yoloHintLabel: String?
-    ): Result<FoodAnalysis> {
-        return analyzeFood(
-            bitmap = bitmap,
-            storageConditions = null,
-            manualProductOverride = yoloHintLabel,
-            yoloHintBox = yoloHintBox
-        )
     }
 
     override fun warmUp() {}

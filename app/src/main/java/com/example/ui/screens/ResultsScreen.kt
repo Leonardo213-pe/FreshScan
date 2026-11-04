@@ -94,7 +94,7 @@ fun ResultsScreen(
     hasPreviousAutomaticResult: Boolean,
     onImproveAnalysisClick: () -> Unit,
     onRestorePreviousResult: () -> Unit,
-    onCorrectProduct: (String, Boolean) -> Unit,
+    onCorrectProduct: (String, RipenessState?, Boolean) -> Unit,
     onNewScanClick: () -> Unit,
     selectedProductIndex: Int = 0,
     onSelectProductIndex: (Int) -> Unit = {},
@@ -118,7 +118,7 @@ fun ResultsScreen(
 
     val selectedCropBitmap = remember(bitmap, activeItem.boundingBox, allItems.size) {
         if (bitmap != null && allItems.size > 1 && activeItem.boundingBox != null && activeItem.boundingBox.isValid) {
-            imageProcessor.cropToYoloBoundingBox(bitmap, activeItem.boundingBox, paddingFraction = 0.16f)
+            imageProcessor.cropToBoundingBox(bitmap, activeItem.boundingBox, paddingFraction = 0.16f)
         } else {
             null
         }
@@ -135,10 +135,11 @@ fun ResultsScreen(
     if (showCorrectionDialog) {
         ManualProductCorrectionDialog(
             currentProductName = activeItem.displayProductName,
+            currentRipeness = activeItem.ripenessState,
             onDismiss = { showCorrectionDialog = false },
-            onConfirmCorrection = { correctedName, reanalyzeWithCloud ->
+            onConfirmCorrection = { correctedName, correctedRipeness, reanalyzeWithCloud ->
                 showCorrectionDialog = false
-                onCorrectProduct(correctedName, reanalyzeWithCloud)
+                onCorrectProduct(correctedName, correctedRipeness, reanalyzeWithCloud)
             }
         )
     }
@@ -686,7 +687,7 @@ private fun MultiProductSummaryCard(
                 }
                 val itemThumb = remember(fullBitmap, item.boundingBox) {
                     if (fullBitmap != null && item.boundingBox != null && item.boundingBox.isValid) {
-                        imageProcessor.cropToYoloBoundingBox(fullBitmap, item.boundingBox, paddingFraction = 0.12f)
+                        imageProcessor.cropToBoundingBox(fullBitmap, item.boundingBox, paddingFraction = 0.12f)
                     } else {
                         null
                     }

@@ -26,7 +26,7 @@
     <string name="manual_correction_apply">Aplicar corrección</string>
     <string name="manual_correction_cancel">Cancelar</string>
 
-    <string name="camera_framing_tip">Centra la fruta o verdura con buena iluminación para detectar su madurez en tiempo real</string>
+    <string name="camera_framing_tip">Centra la fruta o verdura con buena iluminación y captura la foto para analizarla con Gemini</string>
     <string name="camera_permission_title">Permiso de cámara necesario</string>
     <string name="camera_permission_rationale">FreshScan AI necesita acceso a la cámara para escanear frutas y verduras o puedes elegir una foto de tu galería.</string>
     <string name="camera_grant_permission">Conceder permiso de cámara</string>
@@ -36,7 +36,7 @@
     <string name="camera_analyze_food">Analizar alimento</string>
 
     <string name="processing_title">Analizando frescura y madurez...</string>
-    <string name="processing_subtitle">Evaluando coloración superficial, textura e indicadores poscosecha</string>
+    <string name="processing_subtitle">Segmentando alimento, evaluando madurez con Gemini y actualizando memoria evolutiva</string>
     <string name="processing_cancel">Cancelar</string>
     <string name="error_generic_title">No se pudo completar el análisis</string>
     <string name="error_retry_button">Reintentar</string>
@@ -69,8 +69,8 @@
     <string name="about_title">Acerca de FreshScan AI</string>
     <string name="about_purpose_title">Propósito de la aplicación</string>
     <string name="about_purpose_body">FreshScan AI ayuda a estimar el grado de maduración y la vida útil orientativa de frutas y verduras frescas mediante visión por computadora y criterios de fisiología poscosecha.</string>
-    <string name="about_scope_title">Metodología híbrida y catálogo</string>
-    <string name="about_scope_body">Combina detección visual instantánea en el dispositivo con análisis multimodal profundo y tablas poscosecha basadas en USDA FoodKeeper, UC Davis Postharvest Center y FAO.</string>
+    <string name="about_scope_title">Aprendizaje evolutivo y catálogo poscosecha</string>
+    <string name="about_scope_body">Segmenta automáticamente la región del alimento y utiliza Gemini Vision junto con un sistema de aprendizaje evolutivo que inicia desde cero y aprende con cada escaneo y corrección en la nube y en la aplicación, apoyado en tablas de USDA FoodKeeper, UC Davis Postharvest Center y FAO.</string>
     <string name="about_safety_title">Aviso de inocuidad alimentaria</string>
     <string name="about_safety_body">Esta herramienta evalúa únicamente la apariencia externa visible en fotografía y no detecta contaminación microbiológica invisible. Si percibe mal olor, moho o textura viscosa, deseche el alimento.</string>
     <string name="about_privacy_title">Privacidad y consentimiento</string>

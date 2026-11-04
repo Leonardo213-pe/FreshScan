@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Eco
@@ -236,11 +238,26 @@ fun CloudConsentDialog(
 @Composable
 fun ManualProductCorrectionDialog(
     currentProductName: String,
+    currentRipeness: RipenessState = RipenessState.RIPE,
     onDismiss: () -> Unit,
-    onConfirmCorrection: (String, Boolean) -> Unit
+    onConfirmCorrection: (String, RipenessState?, Boolean) -> Unit
 ) {
     var inputName by remember { mutableStateOf(currentProductName) }
-    var reanalyzeWithGemini by remember { mutableStateOf(false) }
+    var selectedRipeness by remember {
+        mutableStateOf(
+            if (currentRipeness == RipenessState.UNDETERMINED) RipenessState.RIPE else currentRipeness
+        )
+    }
+    var reanalyzeWithGemini by remember { mutableStateOf(true) }
+
+    val selectableRipenessStates = remember {
+        listOf(
+            RipenessState.UNRIPE,
+            RipenessState.RIPENING,
+            RipenessState.RIPE,
+            RipenessState.OVERRIPE
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -252,11 +269,15 @@ fun ManualProductCorrectionDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = inputName,
                     onValueChange = { inputName = it },
                     label = { Text(stringResource(R.string.manual_correction_hint)) },
+                    placeholder = { Text("Ej. Maracuyá, Pitahaya, Plátano...") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -264,7 +285,7 @@ fun ManualProductCorrectionDialog(
                 )
 
                 Text(
-                    text = "Catálogo rápido:",
+                    text = "Selección rápida de alimento:",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -273,13 +294,40 @@ fun ManualProductCorrectionDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    FoodProduct.SUPPORTED_CATALOG.take(8).forEach { item ->
+                    FoodProduct.SUPPORTED_CATALOG.take(12).forEach { item ->
+                        val shortLabel = item.canonicalName.substringBefore(" /")
+                        val isChipSelected = inputName.equals(item.canonicalName, ignoreCase = true) ||
+                            inputName.equals(shortLabel, ignoreCase = true)
                         FilterChip(
-                            selected = inputName.equals(item.canonicalName, ignoreCase = true),
-                            onClick = { inputName = item.canonicalName },
+                            selected = isChipSelected,
+                            onClick = { inputName = shortLabel },
                             label = {
                                 Text(
-                                    text = item.canonicalName.substringBefore(" /"),
+                                    text = shortLabel,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Estado de madurez observado:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    selectableRipenessStates.forEach { stateOption ->
+                        FilterChip(
+                            selected = selectedRipeness == stateOption,
+                            onClick = { selectedRipeness = stateOption },
+                            label = {
+                                Text(
+                                    text = stateOption.displayName,
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             }
@@ -300,7 +348,7 @@ fun ManualProductCorrectionDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Re-evaluar madurez visual con IA para este producto",
+                        text = "Re-evaluar detalles y vida útil con Gemini y guardar en el aprendizaje evolutivo",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -311,7 +359,7 @@ fun ManualProductCorrectionDialog(
                 onClick = {
                     val cleaned = inputName.trim()
                     if (cleaned.isNotEmpty()) {
-                        onConfirmCorrection(cleaned, reanalyzeWithGemini)
+                        onConfirmCorrection(cleaned, selectedRipeness, reanalyzeWithGemini)
                     }
                 },
                 enabled = inputName.trim().isNotEmpty(),

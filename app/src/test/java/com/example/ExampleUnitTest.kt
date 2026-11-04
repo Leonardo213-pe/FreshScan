@@ -1,7 +1,7 @@
 package com.example
 
 import com.example.data.estimator.ShelfLifeEstimator
-import com.example.data.local.LocalYoloDetector
+import com.example.data.local.AdaptiveVisualLearner
 import com.example.data.remote.GeminiJsonValidator
 import com.example.domain.model.FoodProduct
 import com.example.domain.model.FutureStoragePlan
@@ -38,6 +38,10 @@ class ExampleUnitTest {
         val strawberry = FoodProduct.findMatchingProduct("Frutillas frescas")
         assertNotNull(strawberry)
         assertEquals("strawberry", strawberry?.id)
+
+        val passionFruit = FoodProduct.findMatchingProduct("Maracuyá")
+        assertNotNull(passionFruit)
+        assertEquals("passion_fruit", passionFruit?.id)
     }
 
     @Test
@@ -173,8 +177,8 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun localYoloDetector_isInstantiable() {
-        val detector = LocalYoloDetector()
-        assertNotNull(detector)
+    fun adaptiveVisualLearner_isInstantiable() {
+        val learner = AdaptiveVisualLearner()
+        assertNotNull(learner)
     }
 }

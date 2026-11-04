@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.freshscanai.fxkmpq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 3
+    versionName = "2.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -143,3 +143,15 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+afterEvaluate {
+  val debugApkFile = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
+  val exportedApkFile = rootProject.file("FreshScanAI-v2.1.apk")
+  tasks.findByName("assembleDebug")?.doLast {
+    if (debugApkFile.exists()) {
+      debugApkFile.copyTo(exportedApkFile, overwrite = true)
+    }
+  }
+}
+
+

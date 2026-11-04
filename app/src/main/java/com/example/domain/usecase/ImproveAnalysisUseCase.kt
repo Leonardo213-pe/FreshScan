@@ -16,14 +16,13 @@ class ImproveAnalysisUseCase(
     ): Result<FoodAnalysis> {
         val productOverride = manualProductOverride
             ?: previousAnalysis.manuallyCorrectedName
-            ?: previousAnalysis.matchedCatalogProduct?.canonicalName
-            ?: previousAnalysis.rawProductName
+            ?: previousAnalysis.displayProductName
 
         return repository.analyzeFood(
             bitmap = bitmap,
             storageConditions = storageConditions,
             manualProductOverride = productOverride,
-            yoloHintBox = previousAnalysis.boundingBox
+            regionBox = previousAnalysis.boundingBox
         )
     }
 }

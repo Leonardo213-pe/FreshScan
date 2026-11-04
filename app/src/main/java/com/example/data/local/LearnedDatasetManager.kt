@@ -13,10 +13,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
 
-class YoloDatasetManager(private val context: Context) {
+class LearnedDatasetManager(private val context: Context) {
 
     fun getDatasetRootDir(): File {
-        val root = File(context.filesDir, "yolo_dataset")
+        val root = File(context.filesDir, "learned_dataset")
         if (!root.exists()) root.mkdirs()
         return root
     }
@@ -49,9 +49,9 @@ class YoloDatasetManager(private val context: Context) {
             }
 
             val itemsToExport = analysis.allProducts
-            val yoloLines = itemsToExport.map { item ->
+            val annotationLines = itemsToExport.map { item ->
                 val classId = resolveClassId(
-                    productId = item.matchedCatalogProduct?.id ?: "other",
+                    productId = item.matchedCatalogProduct?.id ?: item.displayProductName,
                     ripenessState = item.ripenessState.name
                 )
                 val box = item.boundingBox ?: NormalizedBoundingBox(0.15f, 0.15f, 0.85f, 0.85f)
@@ -69,7 +69,7 @@ class YoloDatasetManager(private val context: Context) {
                     height
                 )
             }
-            labelFile.writeText(yoloLines.joinToString("\n"))
+            labelFile.writeText(annotationLines.joinToString("\n"))
 
             val metadataJson = JSONObject().apply {
                 put("sample_id", sampleId)

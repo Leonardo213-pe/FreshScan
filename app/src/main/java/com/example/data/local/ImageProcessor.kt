@@ -114,6 +114,84 @@ class ImageProcessor {
         return transformed
     }
 
+    /**
+     * Segmentación automática de la región de interés (ROI) de frutas y verduras:
+     * Analiza la distribución espacial de saturación cromática y contraste de bordes
+     * respecto al fondo periférico para aislar únicamente la región donde se ubican
+     * los alimentos antes de enviarla a Gemini Vision.
+     */
+    fun segmentProduceRegionBounds(bitmap: Bitmap): NormalizedBoundingBox? {
+        if (!isValidBitmap(bitmap)) return null
+        val gridX = 32
+        val gridY = 32
+        val width = bitmap.width
+        val height = bitmap.height
+        val hsv = FloatArray(3)
+
+        // Muestrear el color promedio del borde periférico para distinguir el fondo
+        var borderSatSum = 0f
+        var borderValSum = 0f
+        var borderCount = 0
+        for (gy in 0 until gridY) {
+            val py = ((gy + 0.5f) * height / gridY).toInt().coerceIn(0, height - 1)
+            for (gx in 0 until gridX) {
+                if (gx == 0 || gx == gridX - 1 || gy == 0 || gy == gridY - 1) {
+                    val px = ((gx + 0.5f) * width / gridX).toInt().coerceIn(0, width - 1)
+                    Color.colorToHSV(bitmap.getPixel(px, py), hsv)
+                    borderSatSum += hsv[1]
+                    borderValSum += hsv[2]
+                    borderCount++
+                }
+            }
+        }
+        val avgBorderSat = if (borderCount > 0) borderSatSum / borderCount else 0.15f
+        val avgBorderVal = if (borderCount > 0) borderValSum / borderCount else 0.50f
+
+        var minFgX = gridX
+        var maxFgX = -1
+        var minFgY = gridY
+        var maxFgY = -1
+        var activeCells = 0
+
+        for (gy in 1 until gridY - 1) {
+            val py = ((gy + 0.5f) * height / gridY).toInt().coerceIn(0, height - 1)
+            for (gx in 1 until gridX - 1) {
+                val px = ((gx + 0.5f) * width / gridX).toInt().coerceIn(0, width - 1)
+                val pixel = bitmap.getPixel(px, py)
+                Color.colorToHSV(pixel, hsv)
+                val s = hsv[1]
+                val v = hsv[2]
+
+                val satDiff = abs(s - avgBorderSat)
+                val valDiff = abs(v - avgBorderVal)
+                val isOrganicForeground = (s >= 0.24f && v in 0.12f..0.96f) ||
+                    (satDiff >= 0.18f && v in 0.14f..0.95f) ||
+                    (valDiff >= 0.25f && s >= 0.16f)
+
+                if (isOrganicForeground) {
+                    activeCells++
+                    if (gx < minFgX) minFgX = gx
+                    if (gx > maxFgX) maxFgX = gx
+                    if (gy < minFgY) minFgY = gy
+                    if (gy > maxFgY) maxFgY = gy
+                }
+            }
+        }
+
+        if (activeCells < 8 || maxFgX <= minFgX || maxFgY <= minFgY) {
+            return null
+        }
+
+        val rawBox = NormalizedBoundingBox(
+            ymin = (minFgY.toFloat() / gridY).coerceIn(0f, 1f),
+            xmin = (minFgX.toFloat() / gridX).coerceIn(0f, 1f),
+            ymax = ((maxFgY + 1).toFloat() / gridY).coerceIn(0f, 1f),
+            xmax = ((maxFgX + 1).toFloat() / gridX).coerceIn(0f, 1f)
+        )
+
+        return computeEffectiveCropBounds(bitmap, rawBox, paddingFraction = 0.12f)
+    }
+
     fun computeEffectiveCropBounds(
         bitmap: Bitmap,
         box: NormalizedBoundingBox,
@@ -124,7 +202,7 @@ class ImageProcessor {
         }
         val boxW = box.xmax - box.xmin
         val boxH = box.ymax - box.ymin
-        if (boxW * boxH > 0.78f) return null
+        if (boxW * boxH > 0.84f) return null
 
         val padX = boxW * paddingFraction
         val padY = boxH * paddingFraction
@@ -162,7 +240,7 @@ class ImageProcessor {
         )
     }
 
-    fun cropToYoloBoundingBox(
+    fun cropToBoundingBox(
         bitmap: Bitmap,
         box: NormalizedBoundingBox?,
         paddingFraction: Float = 0.14f
@@ -185,10 +263,11 @@ class ImageProcessor {
 
     fun optimizeForGemini(
         bitmap: Bitmap,
-        yoloHintBox: NormalizedBoundingBox? = null
+        regionBox: NormalizedBoundingBox? = null
     ): Bitmap {
-        val cropped = if (yoloHintBox != null) {
-            cropToYoloBoundingBox(bitmap, yoloHintBox)
+        val targetBox = regionBox ?: segmentProduceRegionBounds(bitmap)
+        val cropped = if (targetBox != null) {
+            cropToBoundingBox(bitmap, targetBox, paddingFraction = 0.0f)
         } else {
             bitmap
         }

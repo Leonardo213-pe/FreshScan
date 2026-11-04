@@ -4,16 +4,16 @@ enum class AnalysisEngineMode(
     val shortTitle: String,
     val description: String
 ) {
-    HYBRID_YOLO_GEMINI(
-        shortTitle = "Híbrido (YOLO + Gemini)",
-        description = "Detección local ultrarrápida con YOLOv8 + análisis visual profundo con Gemini."
+    GEMINI_EVOLUTIONARY(
+        shortTitle = "Gemini + Aprendizaje Evolutivo",
+        description = "Segmentación de alimento + análisis con Gemini que entrena la memoria en la nube y en la app."
     ),
-    YOLO_LOCAL_ONLY(
-        shortTitle = "Solo YOLO Local",
-        description = "Reconocimiento 100% en el dispositivo sin conexión a internet."
+    LEARNED_MEMORY_OFFLINE(
+        shortTitle = "Memoria Aprendida (Offline)",
+        description = "Evalúa usando únicamente las frutas que el sistema ya aprendió previamente de Gemini."
     ),
     GEMINI_CLOUD_ONLY(
         shortTitle = "Solo Gemini Cloud",
-        description = "Evaluación directa en la nube con Gemini Vision."
+        description = "Evaluación directa en la nube con Gemini Vision y segmentación de región."
     )
 }

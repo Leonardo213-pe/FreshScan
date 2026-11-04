@@ -21,18 +21,23 @@ data class FoodAnalysis(
     val safetyWarning: String = DEFAULT_SAFETY_WARNING,
     val boundingBox: NormalizedBoundingBox? = null,
     val detectedItems: List<FoodAnalysis> = emptyList(),
-    val isPreliminaryYoloResult: Boolean = false,
-    val yoloConfidence: Float? = null,
-    val yoloInferenceTimeMs: Long? = null,
-    val analysisEngineSource: String = "Gemini Cloud"
+    val isPreliminaryResult: Boolean = false,
+    val localConfidence: Float? = null,
+    val inferenceTimeMs: Long? = null,
+    val analysisEngineSource: String = "Gemini Vision + Aprendizaje Evolutivo"
 ) {
     val displayProductName: String
         get() = manuallyCorrectedName?.takeIf { it.isNotBlank() }
+            ?: rawProductName.takeIf {
+                it.isNotBlank() &&
+                    !it.equals("Producto no identificado", ignoreCase = true) &&
+                    matchedCatalogProduct == null
+            }
             ?: matchedCatalogProduct?.canonicalName
             ?: rawProductName.ifBlank { "Producto no identificado" }
 
     val isSupportedForAdvancedFeatures: Boolean
-        get() = matchedCatalogProduct?.isSupportedForAdvancedEstimate == true && isReliableIdentification
+        get() = isReliableIdentification
 
     val hasMultipleDetectedProducts: Boolean
         get() = detectedItems.size > 1

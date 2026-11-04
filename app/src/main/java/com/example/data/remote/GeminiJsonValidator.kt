@@ -68,7 +68,7 @@ object GeminiJsonValidator {
         parseNested: Boolean
     ): GeminiResponseDto {
         val producto = obj.optString("producto", "").trim()
-        val identificacionConfiable = obj.optBoolean("identificacion_confiable", producto.isNotBlank())
+        val identificacionConfiable = obj.optBoolean("identificacion_confiable", producto.isNotBlank() && !isUnknownOrNonFoodLabel(producto))
         val multiples = obj.optBoolean("multiples_productos_o_ambiguo", false)
         val madurez = obj.optString("madurez", "indeterminado").trim()
         val observaciones = optStringList(obj, "observaciones_visuales")
@@ -137,7 +137,7 @@ object GeminiJsonValidator {
             val mappedChild = mapSingleDtoToDomain(
                 dto = childDto,
                 storageConditions = storageConditions,
-                manualProductOverride = null,
+                manualProductOverride = if (dto.productosDetectados.size == 1) manualProductOverride else null,
                 shelfLifeEstimator = shelfLifeEstimator
             )
             if (mappedChild.boundingBox == null) {
@@ -147,7 +147,7 @@ object GeminiJsonValidator {
             } else {
                 mappedChild
             }
-        }.filter { it.isReliableIdentification || it.rawProductName.isNotBlank() }
+        }.filter { it.isReliableIdentification }
 
         val deduplicatedItems = deduplicateOverlappingDetections(rawDetectedList)
 
@@ -182,12 +182,17 @@ object GeminiJsonValidator {
         }
 
         val isReliable = (!isUnknownLabel && dto.identificacionConfiable) ||
-            (!manualProductOverride.isNullOrBlank() && matchedCatalogProduct != null)
+            (!manualProductOverride.isNullOrBlank() && !isUnknownOrNonFoodLabel(manualProductOverride))
 
         val parsedRipeness = if (!isReliable) {
             RipenessState.UNDETERMINED
         } else {
-            RipenessState.fromRawString(dto.madurez)
+            val rawRipeness = RipenessState.fromRawString(dto.madurez)
+            if (rawRipeness == RipenessState.UNDETERMINED && !manualProductOverride.isNullOrBlank()) {
+                RipenessState.RIPE
+            } else {
+                rawRipeness
+            }
         }
 
         val hasDeterioration = dto.posibleDeterioro || dto.senalesDeterioro.isNotEmpty()
@@ -198,7 +203,7 @@ object GeminiJsonValidator {
                 if (isReliable) {
                     listOf("Evaluación visual completada sobre la superficie externa visible.")
                 } else {
-                    listOf("No se observaron rasgos visuales suficientes para identificar el alimento con certeza.")
+                    listOf("No se detectó ninguna fruta o verdura claramente visible en la fotografía.")
                 }
             }
 
@@ -257,7 +262,7 @@ object GeminiJsonValidator {
 
         return FoodAnalysis(
             sessionId = UUID.randomUUID().toString(),
-            rawProductName = dto.producto.ifBlank { effectiveProductName },
+            rawProductName = effectiveProductName,
             manuallyCorrectedName = manualProductOverride?.takeIf { it.isNotBlank() },
             matchedCatalogProduct = matchedCatalogProduct,
             isReliableIdentification = isReliable,
@@ -351,14 +356,24 @@ object GeminiJsonValidator {
         return max(interArea / areaA, interArea / areaB)
     }
 
-    private fun isUnknownOrNonFoodLabel(name: String): Boolean {
+    fun isUnknownOrNonFoodLabel(name: String): Boolean {
         val lower = name.lowercase().trim()
         return lower.isBlank() ||
             lower == "desconocido" ||
             lower == "no identificado" ||
+            lower == "producto no identificado" ||
             lower == "ninguno" ||
+            lower.contains("no se detect") ||
+            lower.contains("sin fruta") ||
+            lower.contains("ninguna fruta") ||
+            lower.contains("no hay fruta") ||
             lower.contains("no es un alimento") ||
-            lower.contains("objeto no alimenticio")
+            lower.contains("no es fruta") ||
+            lower.contains("objeto no alimenticio") ||
+            lower.contains("teclado") ||
+            lower.contains("laptop") ||
+            lower.contains("computadora") ||
+            lower.contains("mano")
     }
 
     private fun sanitizeCertaintyClaims(text: String): String {

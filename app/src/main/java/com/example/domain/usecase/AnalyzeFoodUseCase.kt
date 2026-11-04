@@ -11,25 +11,13 @@ class AnalyzeFoodUseCase(
     suspend operator fun invoke(
         bitmap: Bitmap,
         manualProductOverride: String? = null,
-        yoloHintBox: NormalizedBoundingBox? = null
+        regionBox: NormalizedBoundingBox? = null
     ): Result<FoodAnalysis> {
         return repository.analyzeFood(
             bitmap = bitmap,
             storageConditions = null,
             manualProductOverride = manualProductOverride,
-            yoloHintBox = yoloHintBox
-        )
-    }
-
-    suspend fun invokeFastPhase(
-        bitmap: Bitmap,
-        yoloHintBox: NormalizedBoundingBox? = null,
-        yoloHintLabel: String? = null
-    ): Result<FoodAnalysis> {
-        return repository.analyzeFastRecognition(
-            bitmap = bitmap,
-            yoloHintBox = yoloHintBox,
-            yoloHintLabel = yoloHintLabel
+            regionBox = regionBox
         )
     }
 }

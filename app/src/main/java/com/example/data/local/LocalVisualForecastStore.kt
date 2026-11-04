@@ -60,15 +60,37 @@ class LocalVisualForecastStore(context: Context? = null) {
         val expectedProductKey = matchedProduct?.id
 
         val candidates = cachedRules.filter { rule ->
-            val productMatches = expectedProductKey == null ||
-                rule.productKey.equals(expectedProductKey, ignoreCase = true) ||
-                rule.productName.contains(hintProductName ?: "", ignoreCase = true)
+            val productMatches = if (!hintProductName.isNullOrBlank()) {
+                (expectedProductKey != null && rule.productKey.equals(expectedProductKey, ignoreCase = true)) ||
+                    rule.productName.equals(hintProductName, ignoreCase = true) ||
+                    rule.productName.contains(hintProductName, ignoreCase = true)
+            } else {
+                true
+            }
             productMatches && features.matchesRange(rule)
         }
 
         return candidates.minByOrNull { rule ->
             features.distanceToRuleCenter(rule) - (rule.confirmations * 15L)
         }
+    }
+
+    /**
+     * Recupera los patrones visuales aprendidos (de escaneos previos con Gemini y correcciones
+     * del usuario en la nube/dispositivo) cuyos vectores cromáticos son similares a la imagen actual,
+     * para inyectarlos como memoria evolutiva en el prompt de Gemini.
+     */
+    @Synchronized
+    fun findSimilarLearnedRulesForPrompt(
+        features: VisualFeatureVector,
+        maxExamples: Int = 5
+    ): List<VisualForecastRule> {
+        if (cachedRules.isEmpty()) return emptyList()
+        return cachedRules
+            .sortedBy { rule ->
+                features.distanceToRuleCenter(rule) - (rule.confirmations * 25L)
+            }
+            .take(maxExamples)
     }
 
     private fun rangesOverlap(a: VisualForecastRule, b: VisualForecastRule): Boolean {

@@ -9,23 +9,18 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,12 +50,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,12 +71,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -92,14 +85,11 @@ import com.example.R
 import com.example.data.local.CameraManager
 import com.example.data.local.FlashModeOption
 import com.example.data.local.ImageProcessor
-import com.example.data.local.LocalYoloDetector
 import com.example.domain.model.AnalysisEngineMode
-import com.example.domain.model.FoodAnalysis
-import com.example.domain.model.RipenessState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,7 +109,7 @@ fun CameraScreen(
     onNavigateBack: () -> Unit,
     onOpenConservationGuide: () -> Unit = {},
     onOpenAbout: () -> Unit = {},
-    engineMode: AnalysisEngineMode = AnalysisEngineMode.HYBRID_YOLO_GEMINI,
+    engineMode: AnalysisEngineMode = AnalysisEngineMode.GEMINI_EVOLUTIONARY,
     onEngineModeChange: (AnalysisEngineMode) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -138,15 +128,20 @@ fun CameraScreen(
 
     val cameraManager = remember { CameraManager(context) }
     val imageProcessor = remember { ImageProcessor() }
-    val liveYoloDetector = remember { LocalYoloDetector() }
 
-    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
+    val previewView = remember(context) {
+        PreviewView(context).apply {
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+    }
+
     var isCapturing by remember { mutableStateOf(false) }
     var isLifecycleResumed by remember { mutableStateOf(true) }
     var cameraErrorText by remember { mutableStateOf<String?>(null) }
-    var liveDetection by remember { mutableStateOf<FoodAnalysis?>(null) }
+    var rebindAttemptTrigger by remember { mutableIntStateOf(0) }
 
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, previewView) {
         val granted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.CAMERA
@@ -164,12 +159,8 @@ fun CameraScreen(
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            cameraManager.unbind()
+            cameraManager.unbind(previewView)
         }
-    }
-
-    LaunchedEffect(isCapturing, capturedBitmap, isLifecycleResumed) {
-        cameraManager.setAnalysisPaused(isCapturing || capturedBitmap != null || !isLifecycleResumed)
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -195,45 +186,46 @@ fun CameraScreen(
         }
     }
 
-    LaunchedEffect(previewViewRef, isCameraPermissionGranted, lensFacingBack, flashMode, capturedBitmap) {
-        val previewView = previewViewRef
-        if (isCameraPermissionGranted && previewView != null && capturedBitmap == null) {
+    LaunchedEffect(flashMode) {
+        cameraManager.updateFlashMode(flashMode)
+    }
+
+    val isShowingCameraPreview = capturedBitmap == null
+    LaunchedEffect(
+        previewView,
+        isCameraPermissionGranted,
+        lensFacingBack,
+        isLifecycleResumed,
+        isShowingCameraPreview,
+        rebindAttemptTrigger
+    ) {
+        if (isCameraPermissionGranted && isLifecycleResumed && isShowingCameraPreview) {
             cameraErrorText = null
-            cameraManager.setAnalysisPaused(isCapturing || !isLifecycleResumed)
             val lensFacing = if (lensFacingBack) {
                 CameraSelector.LENS_FACING_BACK
             } else {
                 CameraSelector.LENS_FACING_FRONT
             }
-            val bindResult = cameraManager.bindCamera(
+            var bindResult = cameraManager.bindCamera(
                 lifecycleOwner = lifecycleOwner,
                 previewView = previewView,
                 lensFacing = lensFacing,
-                flashMode = flashMode,
-                onLiveFrameAvailable = { frameBitmap ->
-                    try {
-                        val detected = liveYoloDetector.detectInstant(
-                            bitmap = frameBitmap,
-                            isPreliminaryForHybrid = true,
-                            isLivePreview = true
-                        )
-                        liveDetection = if (detected.boundingBox != null && detected.boundingBox.isValid) {
-                            detected
-                        } else {
-                            null
-                        }
-                    } catch (_: Exception) {
-                    } finally {
-                        if (!frameBitmap.isRecycled) {
-                            frameBitmap.recycle()
-                        }
-                    }
-                }
+                flashMode = flashMode
             )
+            if (bindResult.isFailure) {
+                delay(180L)
+                bindResult = cameraManager.bindCamera(
+                    lifecycleOwner = lifecycleOwner,
+                    previewView = previewView,
+                    lensFacing = lensFacing,
+                    flashMode = flashMode
+                )
+            }
             bindResult.onSuccess { hasFlash ->
+                cameraErrorText = null
                 onHasFlashUnitChanged(hasFlash)
             }.onFailure { err ->
-                cameraErrorText = err.localizedMessage
+                cameraErrorText = err.localizedMessage ?: "No se pudo inicializar la cámara."
             }
         }
     }
@@ -373,32 +365,35 @@ fun CameraScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     textAlign = TextAlign.Center
                                 )
-                                OutlinedButton(
-                                    onClick = {
-                                        photoPickerLauncher.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        )
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Button(
+                                        onClick = { rebindAttemptTrigger++ },
+                                        modifier = Modifier.testTag("retry_camera_bind_button")
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Recargar cámara")
                                     }
-                                ) {
-                                    Text(stringResource(R.string.camera_pick_gallery))
+                                    OutlinedButton(
+                                        onClick = {
+                                            photoPickerLauncher.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        }
+                                    ) {
+                                        Text(stringResource(R.string.camera_pick_gallery))
+                                    }
                                 }
                             }
                         } else {
                             AndroidView(
-                                factory = { ctx ->
-                                    PreviewView(ctx).apply {
-                                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                                        previewViewRef = this
-                                    }
-                                },
+                                factory = { previewView },
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .testTag("camera_preview_view")
                             )
 
-                            LiveDetectionOverlay(
-                                liveDetection = liveDetection,
+                            ScannerFramingGuideOverlay(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -487,98 +482,22 @@ fun CameraScreen(
 }
 
 @Composable
-private fun LiveDetectionOverlay(
-    liveDetection: FoodAnalysis?,
+private fun ScannerFramingGuideOverlay(
     modifier: Modifier = Modifier
 ) {
-    val box = liveDetection?.boundingBox
-    val hasValidBox = box != null && box.isValid
+    Canvas(modifier = modifier) {
+        val left = size.width * 0.14f
+        val top = size.height * 0.16f
+        val rectW = size.width * 0.72f
+        val rectH = size.height * 0.68f
 
-    val targetXmin = if (hasValidBox) box!!.xmin else 0.18f
-    val targetYmin = if (hasValidBox) box!!.ymin else 0.22f
-    val targetXmax = if (hasValidBox) box!!.xmax else 0.82f
-    val targetYmax = if (hasValidBox) box!!.ymax else 0.78f
-
-    val animSpec = spring<Float>(
-        dampingRatio = Spring.DampingRatioLowBouncy,
-        stiffness = Spring.StiffnessMediumLow
-    )
-    val xmin by animateFloatAsState(targetValue = targetXmin, animationSpec = animSpec, label = "xmin")
-    val ymin by animateFloatAsState(targetValue = targetYmin, animationSpec = animSpec, label = "ymin")
-    val xmax by animateFloatAsState(targetValue = targetXmax, animationSpec = animSpec, label = "xmax")
-    val ymax by animateFloatAsState(targetValue = targetYmax, animationSpec = animSpec, label = "ymax")
-
-    val boxColor = when {
-        !hasValidBox -> Color.White.copy(alpha = 0.45f)
-        liveDetection?.hasVisibleDeterioration == true -> Color(0xFFE53935)
-        liveDetection?.ripenessState == RipenessState.RIPE -> Color(0xFF43A047)
-        liveDetection?.ripenessState == RipenessState.RIPENING -> Color(0xFFFB8C00)
-        liveDetection?.ripenessState == RipenessState.UNRIPE -> Color(0xFF7CB342)
-        liveDetection?.ripenessState == RipenessState.OVERRIPE -> Color(0xFFF4511E)
-        else -> Color(0xFF26A69A)
-    }
-
-    val density = LocalDensity.current
-
-    BoxWithConstraints(modifier = modifier) {
-        val widthPx = constraints.maxWidth.toFloat()
-        val heightPx = constraints.maxHeight.toFloat()
-
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val left = xmin * size.width
-            val top = ymin * size.height
-            val rectW = (xmax - xmin) * size.width
-            val rectH = (ymax - ymin) * size.height
-
-            drawRoundRect(
-                color = boxColor.copy(alpha = 0.14f),
-                topLeft = Offset(left, top),
-                size = Size(rectW, rectH),
-                cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
-            )
-            drawRoundRect(
-                color = boxColor,
-                topLeft = Offset(left, top),
-                size = Size(rectW, rectH),
-                cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx()),
-                style = Stroke(width = 2.5.dp.toPx())
-            )
-        }
-
-        if (hasValidBox && liveDetection != null) {
-            val pillX = (xmin * widthPx).roundToInt()
-            val pillY = ((ymin * heightPx) - with(density) { 36.dp.toPx() })
-                .coerceAtLeast(with(density) { 12.dp.toPx() })
-                .roundToInt()
-
-            Surface(
-                color = Color.Black.copy(alpha = 0.72f),
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier
-                    .offset { IntOffset(pillX, pillY) }
-                    .testTag("live_detection_pill")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(boxColor)
-                    )
-                    Text(
-                        text = "${liveDetection.displayProductName} · ${liveDetection.ripenessState.displayName}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                }
-            }
-        }
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.55f),
+            topLeft = Offset(left, top),
+            size = Size(rectW, rectH),
+            cornerRadius = CornerRadius(22.dp.toPx(), 22.dp.toPx()),
+            style = Stroke(width = 2.dp.toPx())
+        )
     }
 }
 
